@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nsd/nsd.dart' as nsd;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/client_state_provider.dart';
 import '../../providers/app_state_providers.dart';
@@ -82,7 +85,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     final prefs = await SharedPreferences.getInstance();
     String? clientId = prefs.getString('client_uuid');
     if (clientId == null) {
-      clientId = const Uuid().v4();
+      clientId = Uuid().v4();
       await prefs.setString('client_uuid', clientId);
     }
 

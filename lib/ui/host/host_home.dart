@@ -6,6 +6,7 @@ import 'views/library_view.dart';
 import 'views/sent_queue_view.dart';
 import 'views/settings_view.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/service_providers.dart';
 
 class HostHome extends ConsumerStatefulWidget {
   const HostHome({super.key});
