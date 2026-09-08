@@ -1,0 +1,63 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/database.dart';
+
+class IntakeItem {
+  final MenuItemData menuItem;
+  final List<String> selectedModifiers;
+
+  IntakeItem({required this.menuItem, this.selectedModifiers = const []});
+
+  IntakeItem copyWith({List<String>? selectedModifiers}) {
+    return IntakeItem(
+      menuItem: menuItem,
+      selectedModifiers: selectedModifiers ?? this.selectedModifiers,
+    );
+  }
+}
+
+class IntakeState {
+  final List<IntakeItem> items;
+  final String customerName;
+
+  IntakeState({this.items = const [], this.customerName = ''});
+
+  IntakeState copyWith({List<IntakeItem>? items, String? customerName}) {
+    return IntakeState(
+      items: items ?? this.items,
+      customerName: customerName ?? this.customerName,
+    );
+  }
+}
+
+class IntakeNotifier extends StateNotifier<IntakeState> {
+  IntakeNotifier() : super(IntakeState());
+
+  void addItem(MenuItemData item, {List<String> selectedModifiers = const []}) {
+    state = state.copyWith(
+      items: [...state.items, IntakeItem(menuItem: item, selectedModifiers: selectedModifiers)],
+    );
+  }
+
+  void updateItemModifiers(int index, List<String> selectedModifiers) {
+    final newItems = List<IntakeItem>.from(state.items);
+    newItems[index] = newItems[index].copyWith(selectedModifiers: selectedModifiers);
+    state = state.copyWith(items: newItems);
+  }
+
+  void removeItem(int index) {
+    final newItems = List<IntakeItem>.from(state.items)..removeAt(index);
+    state = state.copyWith(items: newItems);
+  }
+
+  void setCustomerName(String name) {
+    state = state.copyWith(customerName: name);
+  }
+
+  void clear() {
+    state = IntakeState();
+  }
+}
+
+final intakeProvider = StateNotifierProvider<IntakeNotifier, IntakeState>((ref) {
+  return IntakeNotifier();
+});

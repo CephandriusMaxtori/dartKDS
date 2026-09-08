@@ -1,0 +1,11 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # removed unrecognized store_query_cache
+          generate_manager: true
+      json_serializable:
+        options:
+          checked: true
+          any_map: true
