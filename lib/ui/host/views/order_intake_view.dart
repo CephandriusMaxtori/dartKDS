@@ -39,6 +39,8 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   Widget build(BuildContext context) {
     final db = ref.watch(databaseProvider);
     final intakeState = ref.watch(intakeProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     double totalPrice = 0;
     for (var item in intakeState.items) {
@@ -49,30 +51,43 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       children: [
         Column(
           children: [
-            // Search and Categories
+            // Search and Categories - Refined Design
             Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                border: Border(bottom: BorderSide(color: theme.dividerColor)),
+              ),
               child: Column(
                 children: [
                   TextField(
                     onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Search menu...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
+                      hintStyle: TextStyle(color: theme.hintColor, fontWeight: FontWeight.normal),
+                      prefixIcon: Icon(Icons.search, size: 18, color: theme.hintColor),
                       filled: true,
-                      fillColor: const Color(0xFFF3F4F6),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      fillColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.dividerColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   StreamBuilder<List<String>>(
                     stream: db.select(db.menuItems).watch().map((items) => ['ALL', ...{...items.map((i) => i.category.toUpperCase())}]),
                     builder: (context, snapshot) {
                       final categories = snapshot.data ?? ['ALL'];
                       return SizedBox(
-                        height: 40,
+                        height: 36,
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: categories.length,
@@ -80,18 +95,29 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                           itemBuilder: (context, index) {
                             final cat = categories[index];
                             final isSelected = _selectedCategory == cat;
-                            return ChoiceChip(
-                              label: Text(cat),
-                              selected: isSelected,
-                              onSelected: (val) => setState(() => _selectedCategory = cat),
-                              selectedColor: const Color(0xFF2563EB),
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : Colors.black87,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                            return InkWell(
+                              onTap: () => setState(() => _selectedCategory = cat),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isSelected ? const Color(0xFF111111) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isSelected ? const Color(0xFF111111) : theme.dividerColor,
+                                  ),
+                                ),
+                                child: Text(
+                                  cat,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.white : theme.textTheme.bodyMedium?.color,
+                                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                                    fontSize: 11,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                               ),
-                              showCheckmark: false,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
                             );
                           },
                         ),
@@ -101,9 +127,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 ],
               ),
             ),
-            // Upper Half: Menu Grid
+            // Menu Grid
             Expanded(
-              flex: 55,
+              flex: 60,
               child: StreamBuilder<List<MenuItemData>>(
                 stream: db.select(db.menuItems).watch(),
                 builder: (context, snapshot) {
@@ -111,99 +137,78 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   
                   var items = snapshot.data!;
-
-                  // Filter by Category
-                  if (_selectedCategory != 'ALL') {
-                    items = items.where((i) => i.category.toUpperCase() == _selectedCategory).toList();
-                  }
-
-                  // Filter by Search
-                  if (_searchQuery.isNotEmpty) {
-                    items = items.where((i) => i.name.toLowerCase().contains(_searchQuery)).toList();
-                  }
+                  if (_selectedCategory != 'ALL') items = items.where((i) => i.category.toUpperCase() == _selectedCategory).toList();
+                  if (_searchQuery.isNotEmpty) items = items.where((i) => i.name.toLowerCase().contains(_searchQuery)).toList();
                   
                   if (items.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(_searchQuery.isEmpty ? Icons.library_add : Icons.search_off, size: 64, color: const Color(0xFFE5E7EB)),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty ? 'No Items in Category' : 'No matches found', 
-                            style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.bold)
-                          ),
-                        ],
-                      ),
-                    );
+                    return Center(child: Text('No items found', style: TextStyle(color: theme.hintColor, fontWeight: FontWeight.w600)));
                   }
 
                   return GridView.builder(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 1.1,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1,
                     ),
                     itemCount: items.length,
                     itemBuilder: (context, index) {
                       final item = items[index];
-                      final isOutOfStock = item.trackStock && item.stockQuantity <= 0;
+                      final isOut = item.trackStock && item.stockQuantity <= 0;
                       
                       return Material(
-                        color: isOutOfStock ? Colors.grey.shade200 : Colors.white,
+                        color: isOut ? theme.dividerColor.withOpacity(0.3) : theme.cardColor,
                         borderRadius: BorderRadius.circular(8),
+                        clipBehavior: Clip.antiAlias,
                         child: InkWell(
-                          onTap: isOutOfStock ? null : () => _handleItemTap(context, ref, item),
-                          borderRadius: BorderRadius.circular(8),
+                          onTap: isOut ? null : () => _handleItemTap(context, ref, item),
                           child: Container(
                             decoration: BoxDecoration(
-                              border: Border.all(color: isOutOfStock ? Colors.transparent : const Color(0xFFE5E7EB)),
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isOut ? Colors.transparent : theme.dividerColor,
+                                width: 1,
+                              ),
                             ),
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(12),
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  item.name,
-                                  textAlign: TextAlign.center,
+                                  item.name.toUpperCase(),
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w800, 
-                                    fontSize: 14,
-                                    color: isOutOfStock ? Colors.grey : Colors.black87,
+                                    fontWeight: FontWeight.w900, 
+                                    fontSize: 13,
+                                    color: isOut ? theme.hintColor : theme.textTheme.bodyLarge?.color,
+                                    letterSpacing: -0.2,
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
+                                const Spacer(),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     if (item.trackStock)
                                       Text(
-                                        '(${item.stockQuantity}) ',
+                                        'QTY: ${item.stockQuantity}',
                                         style: TextStyle(
-                                          fontSize: 12, 
-                                          color: isOutOfStock ? Colors.red : Colors.orange.shade700, 
-                                          fontWeight: FontWeight.w900,
+                                          fontSize: 10, 
+                                          color: isOut ? Colors.red : const Color(0xFF666666), 
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
                                     Text(
                                       '\$${item.price.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontSize: 12, 
-                                        color: isOutOfStock ? Colors.grey : const Color(0xFF2563EB), 
-                                        fontWeight: FontWeight.bold,
+                                        color: isOut ? theme.hintColor : const Color(0xFF2563EB), 
+                                        fontWeight: FontWeight.w900,
                                       ),
                                     ),
                                   ],
                                 ),
-                                if (isOutOfStock)
-                                  const Text(
-                                    'OUT OF STOCK',
-                                    style: TextStyle(fontSize: 8, color: Colors.red, fontWeight: FontWeight.w900),
-                                  ),
                               ],
                             ),
                           ),
@@ -214,90 +219,74 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 },
               ),
             ),
-            const Divider(height: 1, color: Color(0xFFE5E7EB)),
-            // Lower Half: Current Ticket
-            Expanded(
-              flex: 45,
+            // Current Ticket Sidebar (Repurposed as bottom-snap for mobile)
+            Container(
+              height: 280,
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: theme.dividerColor, width: 2)),
+              ),
               child: Material(
-                color: Theme.of(context).cardTheme.color ?? Colors.white,
+                color: theme.cardColor,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(16),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'CURRENT TICKET (${intakeState.items.length})',
-                            style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF6B7280), fontSize: 11),
-                          ),
+                          Text('CURRENT TICKET', style: theme.textTheme.labelLarge),
                           if (intakeState.items.isNotEmpty)
-                            GestureDetector(
-                              onTap: () => ref.read(intakeProvider.notifier).clear(),
-                              child: const Text('CLEAR', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 11)),
+                            TextButton(
+                              onPressed: () => ref.read(intakeProvider.notifier).clear(),
+                              child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 12)),
                             ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: ListView.builder(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: intakeState.items.length,
+                        separatorBuilder: (context, index) => Divider(color: theme.dividerColor, height: 1),
                         itemBuilder: (context, index) {
                           final item = intakeState.items[index];
                           return ListTile(
-                            dense: true,
+                            contentPadding: EdgeInsets.zero,
                             visualDensity: VisualDensity.compact,
-                            leading: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(4)),
-                              child: Text('${item.quantity}x', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black)),
-                            ),
-                            title: Text(item.menuItem.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Theme.of(context).textTheme.bodyMedium?.color)),
+                            leading: Text('${item.quantity}×', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                            title: Text(item.menuItem.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                             subtitle: item.selectedModifiers.isNotEmpty 
-                              ? Text(item.selectedModifiers.join(', '), style: const TextStyle(color: Color(0xFF2563EB), fontSize: 12))
-                              : Text(item.menuItem.defaultStation, style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
-                            trailing: Text(
-                              '\$${(item.menuItem.price * item.quantity).toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onTap: () => _showModifierDialog(
-                              context, 
-                              ref, 
-                              item.menuItem, 
-                              editIndex: index, 
-                              initialSelected: item.selectedModifiers,
-                              initialQuantity: item.quantity,
-                            ),
+                              ? Text(item.selectedModifiers.join(' • '), style: const TextStyle(fontSize: 11, color: Color(0xFF666666)))
+                              : null,
+                            trailing: Text('\$${(item.menuItem.price * item.quantity).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                            onTap: () => _showModifierDialog(context, ref, item.menuItem, editIndex: index, initialSelected: item.selectedModifiers, initialQuantity: item.quantity),
                           );
                         },
                       ),
                     ),
+                    // Send Button - High Contrast Design
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      padding: const EdgeInsets.all(16),
                       child: SizedBox(
-                        height: 56,
+                        width: double.infinity,
+                        height: 54,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: intakeState.items.isEmpty ? const Color(0xFFE5E7EB) : const Color(0xFF2563EB),
+                            backgroundColor: intakeState.items.isEmpty ? theme.dividerColor : const Color(0xFF111111),
                             foregroundColor: Colors.white,
                             elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                           onPressed: intakeState.items.isEmpty ? null : () => _sendToKitchen(context, ref),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text(
-                                'SEND TO KITCHEN',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2),
-                              ),
+                              const Text('COMPLETE ORDER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                               if (totalPrice > 0) ...[
-                                const VerticalDivider(color: Colors.white54, width: 32, indent: 12, endIndent: 12),
-                                Text(
-                                  '\$${totalPrice.toStringAsFixed(2)}',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                                ),
+                                const SizedBox(width: 12),
+                                const Text('•', style: TextStyle(color: Colors.white38)),
+                                const SizedBox(width: 12),
+                                Text('\$${totalPrice.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
                               ],
                             ],
                           ),
@@ -345,119 +334,105 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
             final globals = snapshot.data ?? [];
             final allModifiers = {...item.modifiers, ...globals.map((g) => g.name)}.toList();
             final requiredMods = item.requiredModifiers ?? [];
-            
-            bool isRequirementMet = true;
-            if (requiredMods.isNotEmpty) {
-              isRequirementMet = selected.any((s) => requiredMods.contains(s));
-            }
+            bool isRequirementMet = requiredMods.isEmpty || selected.any((s) => requiredMods.contains(s));
 
             return AlertDialog(
-              backgroundColor: Theme.of(context).cardTheme.color,
+              backgroundColor: Theme.of(context).cardColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Theme.of(context).dividerColor)),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+              contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Add to Ticket: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(item.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.4)),
                   if (requiredMods.isNotEmpty)
-                    Text(
-                      'REQUIRED: Select at least one (${requiredMods.join(", ")})',
-                      style: TextStyle(fontSize: 12, color: isRequirementMet ? Colors.green : Colors.red, fontWeight: FontWeight.bold),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text('REQUIREMENT: SELECT ONE (${requiredMods.join(", ")})', 
+                        style: TextStyle(fontSize: 10, color: isRequirementMet ? const Color(0xFF22C55E) : Colors.red, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                     ),
                 ],
               ),
               content: SizedBox(
-                width: 450,
+                width: 400,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('QUANTITY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey)),
-                    const SizedBox(height: 8),
+                    const Text('QUANTITY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF666666), letterSpacing: 1)),
+                    const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      height: 60,
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle, size: 32, color: Color(0xFFDC2626)),
-                            onPressed: quantity > 1 ? () => setDialogState(() => quantity--) : null,
+                          Expanded(
+                            child: IconButton(
+                              icon: const Icon(Icons.remove, size: 20),
+                              onPressed: quantity > 1 ? () => setDialogState(() => quantity--) : null,
+                            ),
                           ),
-                          Column(
-                            children: [
-                              Text('$quantity', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
-                              if (item.trackStock)
-                                Text('Max: ${item.stockQuantity}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                            ],
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            flex: 2,
+                            child: Center(child: Text('$quantity', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle, size: 32, color: Color(0xFF22C55E)),
-                            onPressed: (item.trackStock && quantity >= item.stockQuantity) 
-                              ? null 
-                              : () => setDialogState(() => quantity++),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            child: IconButton(
+                              icon: const Icon(Icons.add, size: 20),
+                              onPressed: (item.trackStock && quantity >= item.stockQuantity) ? null : () => setDialogState(() => quantity++),
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text('MODIFIERS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey)),
-                    const SizedBox(height: 8),
+                    const Text('MODIFIERS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF666666), letterSpacing: 1)),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: [
-                        // Show Required Modifiers first with distinct styling if needed
-                        ...allModifiers.map((mod) {
-                          final isSelected = selected.contains(mod);
-                          final isRequired = requiredMods.contains(mod);
-                          return FilterChip(
-                            label: Text(mod),
-                            selected: isSelected,
-                            onSelected: (val) {
-                              setDialogState(() {
-                                if (val) {
-                                  // If it's a required mod, we might want to allow only one?
-                                  // For now, just add it.
-                                  selected.add(mod);
-                                } else {
-                                  selected.remove(mod);
-                                }
-                              });
-                            },
-                            side: isRequired && !isSelected ? const BorderSide(color: Colors.red, width: 2) : null,
-                            selectedColor: const Color(0xFF2563EB),
-                            checkmarkColor: Colors.white,
-                            labelStyle: TextStyle(color: isSelected ? Colors.white : null),
-                          );
-                        }).toList(),
-                      ],
+                      children: allModifiers.map((mod) {
+                        final isSelected = selected.contains(mod);
+                        final isReq = requiredMods.contains(mod);
+                        return FilterChip(
+                          label: Text(mod),
+                          selected: isSelected,
+                          onSelected: (val) => setDialogState(() => val ? selected.add(mod) : selected.remove(mod)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            side: BorderSide(color: isReq && !isSelected ? Colors.red : (isSelected ? Colors.transparent : Theme.of(context).dividerColor)),
+                          ),
+                          backgroundColor: Colors.transparent,
+                          selectedColor: const Color(0xFF111111),
+                          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color, fontWeight: FontWeight.w700, fontSize: 12),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('CANCEL'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF666666)))),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isRequirementMet ? const Color(0xFF2563EB) : Colors.grey, 
+                    backgroundColor: isRequirementMet ? const Color(0xFF111111) : Theme.of(context).dividerColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: isRequirementMet ? () {
-                    if (editIndex != null) {
-                      ref.read(intakeProvider.notifier).updateItem(editIndex, modifiers: selected, quantity: quantity);
-                    } else {
-                      ref.read(intakeProvider.notifier).addItem(item, selectedModifiers: selected, quantity: quantity);
-                    }
+                    if (editIndex != null) ref.read(intakeProvider.notifier).updateItem(editIndex, modifiers: selected, quantity: quantity);
+                    else ref.read(intakeProvider.notifier).addItem(item, selectedModifiers: selected, quantity: quantity);
                     HapticFeedback.mediumImpact();
                     Navigator.pop(context);
                   } : null,
-                  child: Text(editIndex != null ? 'UPDATE' : 'ADD TO TICKET'),
+                  child: Text(editIndex != null ? 'SAVE CHANGES' : 'ADD TO ORDER'),
                 ),
               ],
             );
@@ -472,7 +447,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final state = ref.read(intakeProvider);
     final db = ref.read(databaseProvider);
     final server = ref.read(hostServerProvider);
-    
     final orderUuid = const Uuid().v4();
     final timestamp = DateTime.now();
 
@@ -484,17 +458,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     ));
 
     final List<Map<String, dynamic>> jsonItems = [];
-
     for (final item in state.items) {
-      // Decrement stock if tracking is enabled
       if (item.menuItem.trackStock) {
         await (db.update(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).write(
-          MenuItemsCompanion(
-            stockQuantity: drift.Value(item.menuItem.stockQuantity - item.quantity),
-          ),
+          MenuItemsCompanion(stockQuantity: drift.Value(item.menuItem.stockQuantity - item.quantity)),
         );
       }
-
       for (int i = 0; i < item.quantity; i++) {
         final itemUuid = const Uuid().v4();
         await db.into(db.kDSItems).insert(KDSItemsCompanion.insert(
@@ -506,7 +475,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           status: ItemStatus.pending,
           price: drift.Value(item.menuItem.price),
         ));
-
         jsonItems.add({
           'uuid': itemUuid,
           'name': item.menuItem.name,
@@ -532,9 +500,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     server.broadcast(broadcastPayload);
     ref.read(intakeProvider.notifier).clear();
     _confettiController.play();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order Sent!'), backgroundColor: Color(0xFF22C55E)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Sent Successfully'), backgroundColor: Color(0xFF111111)));
   }
 }

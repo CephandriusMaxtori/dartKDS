@@ -8,115 +8,131 @@ class RoleSelectionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: const Color(0xFF030712), // Deep charcoal background
+      backgroundColor: const Color(0xFFF9F8F6), // Warm Neutral Stone
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          padding: const EdgeInsets.symmetric(horizontal: 40.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Spacer(flex: 2),
-              // Logo/Branding
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.restaurant_menu,
-                  size: 80,
-                  color: Color(0xFF2563EB),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'DART KDS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 42,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                ),
-              ),
-              const Text(
-                'OFFLINE KITCHEN ECOSYSTEM',
-                style: TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                ),
+              // Branding Block - Minimalist & Industrial
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.restaurant_menu_rounded, color: Colors.white, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DARTKDS',
+                        style: TextStyle(
+                          color: Color(0xFF111111),
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.8,
+                        ),
+                      ),
+                      Text(
+                        'SYSTEM INITIALIZATION',
+                        style: TextStyle(
+                          color: Color(0xFF888888),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
               const Spacer(),
               const Text(
-                'SELECT DEVICE ROLE',
+                'ASSIGN DEVICE ROLE',
                 style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
+                  color: Color(0xFF666666),
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.2,
                 ),
               ),
-              const SizedBox(height: 24),
-              // Role Cards
-              _buildRoleCard(
+              const SizedBox(height: 20),
+              // Server Host Card
+              _buildRoleOption(
                 context: context,
-                title: 'SERVER HOST',
-                subtitle: 'Manage menu & take orders',
-                description: 'Runs the database and web server.',
-                icon: Icons.dns,
-                color: const Color(0xFF2563EB),
+                title: 'PRIMARY HOST',
+                subtitle: 'Order Intake & Local Server',
+                description: 'This device will host the database and manage all connected displays.',
+                icon: Icons.dns_outlined,
+                accentColor: const Color(0xFF2563EB),
                 onTap: () async {
                   try {
-                    // Show loading indicator
                     showDialog(
                       context: context,
                       barrierDismissible: false,
-                      builder: (context) => const Center(child: CircularProgressIndicator()),
+                      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF111111), strokeWidth: 3)),
                     );
                     
                     await ref.read(hostServerProvider).start();
-                    await Future.delayed(const Duration(milliseconds: 500));
+                    await Future.delayed(const Duration(milliseconds: 600));
                     await ref.read(discoveryServiceProvider).register(8080);
                     
                     if (context.mounted) {
-                      Navigator.pop(context); // Remove loading
+                      Navigator.pop(context);
                       ref.read(deviceRoleProvider.notifier).state = DeviceRole.host;
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      Navigator.pop(context); // Remove loading
+                      Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to start Host: $e'), backgroundColor: Colors.red),
+                        SnackBar(
+                          content: Text('INIT FAILED: $e', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                          backgroundColor: const Color(0xFF111111),
+                          behavior: SnackBarBehavior.floating,
+                        ),
                       );
                     }
                   }
                 },
               ),
-              const SizedBox(height: 16),
-              _buildRoleCard(
+              const SizedBox(height: 12),
+              // Kitchen Display Card
+              _buildRoleOption(
                 context: context,
-                title: 'KITCHEN DISPLAY',
-                subtitle: 'View & bump orders',
-                description: 'Prep line or expo display screen.',
-                icon: Icons.tablet_android,
-                color: const Color(0xFF22C55E),
+                title: 'DISPLAY CLIENT',
+                subtitle: 'Kitchen Prep / Expo Screen',
+                description: 'Connects to a Host to view, track, and bump incoming orders.',
+                icon: Icons.tablet_android_rounded,
+                accentColor: const Color(0xFF059669),
                 onTap: () {
                   ref.read(deviceRoleProvider.notifier).state = DeviceRole.client;
                 },
               ),
               const Spacer(flex: 2),
-              const Text(
-                'v1.0.0 • AIR-GAPPED READY',
-                style: TextStyle(
-                  color: Color(0xFF374151),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+              const Align(
+                alignment: Alignment.center,
+                child: Text(
+                  'STABLE BUILD v1.0.1 • AIR-GAPPED OFFLINE PROTOCOL',
+                  style: TextStyle(
+                    color: Color(0xFFBBBBBB),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -124,79 +140,67 @@ class RoleSelectionScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildRoleCard({
+  Widget _buildRoleOption({
     required BuildContext context,
     required String title,
     required String subtitle,
     required String description,
     required IconData icon,
-    required Color color,
+    required Color accentColor,
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1F2937),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF374151), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE5E2DC), width: 1),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 32),
+              Row(
+                children: [
+                  Icon(icon, color: const Color(0xFF111111), size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFDDDDDD), size: 14),
+                ],
               ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Color(0xFF111111),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Color(0xFF4B5563)),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  color: Color(0xFF666666),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
+              ),
             ],
           ),
         ),

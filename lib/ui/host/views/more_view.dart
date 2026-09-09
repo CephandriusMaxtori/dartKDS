@@ -9,108 +9,74 @@ class MoreView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isCompact = screenWidth < 600;
+    final theme = Theme.of(context);
+    final isCompact = MediaQuery.of(context).size.width < 600;
 
-    return Padding(
-      padding: EdgeInsets.all(isCompact ? 12 : 16),
-      child: GridView.count(
-        crossAxisCount: isCompact ? 2 : 3,
-        mainAxisSpacing: isCompact ? 12 : 16,
-        crossAxisSpacing: isCompact ? 12 : 16,
-        childAspectRatio: isCompact ? 1.1 : 1.4,
-        children: [
-          _buildMoreCard(
-            context,
-            title: 'SENT QUEUE',
-            subtitle: 'Historical orders',
-            icon: Icons.history,
-            color: Colors.blue,
-            target: const SentQueueView(),
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: theme.dividerColor)),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('MANAGEMENT HUB', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.4)),
+                  Text('System configuration and reporting.', style: TextStyle(color: Color(0xFF666666), fontSize: 13, fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
           ),
-          _buildMoreCard(
-            context,
-            title: 'STATIONS',
-            subtitle: 'Routing config',
-            icon: Icons.router,
-            color: Colors.orange,
-            target: const LibraryView(initialTab: 1), // STATIONS tab
-          ),
-          _buildMoreCard(
-            context,
-            title: 'MODIFIERS',
-            subtitle: 'Global options',
-            icon: Icons.tune,
-            color: Colors.purple,
-            target: const LibraryView(initialTab: 2), // MODIFIERS tab
-          ),
-          _buildMoreCard(
-            context,
-            title: 'BACKUP',
-            subtitle: 'Import & Export',
-            icon: Icons.backup,
-            color: Colors.green,
-            target: const LibraryView(initialTab: 3), // BACKUP tab
-          ),
-          _buildMoreCard(
-            context,
-            title: 'SETTINGS',
-            subtitle: 'App preferences',
-            icon: Icons.settings,
-            color: Colors.grey,
-            target: const SettingsView(),
-          ),
-          _buildMoreCard(
-            context,
-            title: 'DEVICES',
-            subtitle: 'Connected displays',
-            icon: Icons.important_devices,
-            color: Colors.indigo,
-            target: const SettingsView(), // Also in settings for now
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverGrid.count(
+              crossAxisCount: isCompact ? 2 : 3,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.3,
+              children: [
+                _buildCard(context, 'SENT QUEUE', 'Order history', Icons.history_rounded, const Color(0xFF2563EB), const SentQueueView()),
+                _buildCard(context, 'STATIONS', 'Routing lines', Icons.router_rounded, const Color(0xFFD97706), const LibraryView(initialTab: 1)),
+                _buildCard(context, 'MODIFIERS', 'Global choices', Icons.tune_rounded, const Color(0xFF7C3AED), const LibraryView(initialTab: 2)),
+                _buildCard(context, 'BACKUP', 'Data sync', Icons.backup_table_rounded, const Color(0xFF059669), const LibraryView(initialTab: 3)),
+                _buildCard(context, 'DEVICES', 'KDS display list', Icons.important_devices_rounded, const Color(0xFF4B5563), const SettingsView()),
+                _buildCard(context, 'SETTINGS', 'Preferences', Icons.settings_rounded, const Color(0xFF111111), const SettingsView()),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMoreCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required Widget target,
-  }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.withOpacity(0.2)),
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: Text(title)),
-                body: target,
-              ),
+  Widget _buildCard(BuildContext context, String title, String sub, IconData icon, Color color, Widget target) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => Scaffold(appBar: AppBar(title: Text(title)), body: target))),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+              child: Icon(icon, color: color, size: 22),
             ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color, size: 32),
-              const Spacer(),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-            ],
-          ),
+            const Spacer(),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+            Text(sub, style: TextStyle(color: theme.hintColor, fontSize: 10, fontWeight: FontWeight.w700)),
+          ],
         ),
       ),
     );

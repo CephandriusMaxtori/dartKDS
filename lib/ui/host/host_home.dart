@@ -28,67 +28,68 @@ class _HostHomeState extends ConsumerState<HostHome> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final theme = Theme.of(context);
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: 70,
         title: Row(
           children: [
-            const Icon(Icons.circle, color: Colors.green, size: 12),
-            const SizedBox(width: 8),
+            Container(
+              width: 8, height: 8,
+              decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 12),
             Text(
-              _currentIndex == 0 
-                ? 'Take Order' 
-                : (_currentIndex == 1 
-                  ? 'Inventory' 
-                  : (_currentIndex == 2 ? 'Library' : 'More')),
-              style: const TextStyle(fontWeight: FontWeight.w900),
+              _currentIndex == 0 ? 'TERMINAL' : (_currentIndex == 1 ? 'STOCK' : (_currentIndex == 2 ? 'LIBRARY' : 'SYSTEM')),
+              style: const TextStyle(letterSpacing: 1.5, fontSize: 13),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Restart Discovery',
-            onPressed: () async {
-              await ref.read(discoveryServiceProvider).stop();
-              await ref.read(discoveryServiceProvider).register(8080);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Discovery Service Restarted')),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: theme.dividerColor)),
+            ),
+            alignment: Alignment.center,
+            child: StreamBuilder(
+              stream: Stream.periodic(const Duration(seconds: 1)),
+              builder: (context, snapshot) {
+                return Text(
+                  DateFormat(timeFormat).format(DateTime.now()),
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontFamily: 'monospace', fontSize: 15),
                 );
-              }
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: StreamBuilder(
-                stream: Stream.periodic(const Duration(seconds: 1)),
-                builder: (context, snapshot) {
-                  return Text(
-                    DateFormat(timeFormat).format(DateTime.now()),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-                  );
-                },
-              ),
+              },
             ),
           ),
         ],
       ),
       body: _views[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: const Color(0xFF2563EB),
-        unselectedItemColor: const Color(0xFF6B7280),
-        type: BottomNavigationBarType.fixed, // Use fixed to show label for 4 items
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.add_shopping_cart), label: 'Take Order'),
-          BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Inventory'),
-          BottomNavigationBarItem(icon: Icon(Icons.library_books), label: 'Library'),
-          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: theme.dividerColor, width: 1.5)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          selectedItemColor: const Color(0xFF111111),
+          unselectedItemColor: const Color(0xFF999999),
+          backgroundColor: theme.scaffoldBackgroundColor,
+          elevation: 0,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.apps_rounded, size: 22), label: 'ORDER'),
+            BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded, size: 22), label: 'STOCK'),
+            BottomNavigationBarItem(icon: Icon(Icons.book_rounded, size: 22), label: 'MENU'),
+            BottomNavigationBarItem(icon: Icon(Icons.more_horiz_rounded, size: 22), label: 'MORE'),
+          ],
+        ),
       ),
     );
   }
