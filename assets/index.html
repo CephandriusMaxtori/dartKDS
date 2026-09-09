@@ -53,7 +53,7 @@
             transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
-        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header-left { display: flex; align-items: center; gap: 16px; flex: 1; }
 
         .station-badge {
             background-color: var(--primary-green);
@@ -63,9 +63,9 @@
             text-transform: uppercase;
         }
 
-        #clock { font-family: monospace; font-size: 24px; font-weight: bold; }
+        #clock { font-family: monospace; font-size: 24px; font-weight: bold; flex: 1; text-align: center; }
 
-        .header-right { display: flex; align-items: center; gap: 20px; }
+        .header-right { display: flex; align-items: center; gap: 20px; flex: 1; justify-content: flex-end; }
 
         .settings-btn {
             background: none; border: none; color: var(--text-primary);
