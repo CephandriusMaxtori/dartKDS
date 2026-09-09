@@ -4,13 +4,19 @@ import '../models/database.dart';
 class IntakeItem {
   final MenuItemData menuItem;
   final List<String> selectedModifiers;
+  final int quantity;
 
-  IntakeItem({required this.menuItem, this.selectedModifiers = const []});
+  IntakeItem({
+    required this.menuItem,
+    this.selectedModifiers = const [],
+    this.quantity = 1,
+  });
 
-  IntakeItem copyWith({List<String>? selectedModifiers}) {
+  IntakeItem copyWith({List<String>? selectedModifiers, int? quantity}) {
     return IntakeItem(
       menuItem: menuItem,
       selectedModifiers: selectedModifiers ?? this.selectedModifiers,
+      quantity: quantity ?? this.quantity,
     );
   }
 }
@@ -32,15 +38,18 @@ class IntakeState {
 class IntakeNotifier extends StateNotifier<IntakeState> {
   IntakeNotifier() : super(IntakeState());
 
-  void addItem(MenuItemData item, {List<String> selectedModifiers = const []}) {
+  void addItem(MenuItemData item, {List<String> selectedModifiers = const [], int quantity = 1}) {
     state = state.copyWith(
-      items: [...state.items, IntakeItem(menuItem: item, selectedModifiers: selectedModifiers)],
+      items: [...state.items, IntakeItem(menuItem: item, selectedModifiers: selectedModifiers, quantity: quantity)],
     );
   }
 
-  void updateItemModifiers(int index, List<String> selectedModifiers) {
+  void updateItem(int index, {List<String>? modifiers, int? quantity}) {
     final newItems = List<IntakeItem>.from(state.items);
-    newItems[index] = newItems[index].copyWith(selectedModifiers: selectedModifiers);
+    newItems[index] = newItems[index].copyWith(
+      selectedModifiers: modifiers,
+      quantity: quantity,
+    );
     state = state.copyWith(items: newItems);
   }
 

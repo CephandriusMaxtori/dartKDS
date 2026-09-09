@@ -1,6 +1,6 @@
 {
-    "name": "openkds",
-    "short_name": "openkds",
+    "name": "DartKDS",
+    "short_name": "DartKDS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -63,7 +63,7 @@ class MyApp extends ConsumerWidget {
     );
 
     return MaterialApp(
-      title: 'Custom KDS',
+      title: 'DartKDS',
       debugShowCheckedModeBanner: false,
       theme: role == DeviceRole.client ? kitchenTheme : hostTheme,
       home: _getHome(role),

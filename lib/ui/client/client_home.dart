@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nsd/nsd.dart' as nsd;
 import 'package:intl/intl.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:confetti/confetti.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../providers/service_providers.dart';
@@ -24,11 +26,13 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   bool _isConnected = false;
   StreamSubscription? _wsSubscription;
   String _deviceIp = '...';
+  final _audioPlayer = AudioPlayer();
+  late ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
-    // 1. Lock to Landscape and Enter Immersive Full-Screen
+    _confettiController = ConfettiController(duration: const Duration(seconds: 1));
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -39,6 +43,25 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       _fetchIp();
       _startDiscovery();
     });
+  }
+
+  Future<void> _playSound() async {
+    final settings = ref.read(settingsProvider);
+    try {
+      await _audioPlayer.setVolume(settings.clientVolume);
+      await _audioPlayer.play(AssetSource('notification.mp3'));
+    } catch (e) {
+      print('Error playing sound: $e');
+    }
+  }
+
+  void _handleIncomingMessage(String message) {
+    final data = jsonDecode(message);
+    if (data['type'] == 'OrderCreated') {
+      _playSound();
+      HapticFeedback.vibrate();
+    }
+    ref.read(clientStateProvider.notifier).handleEvent(message);
   }
 
   Future<void> _fetchIp() async {
@@ -53,7 +76,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 
   @override
   void dispose() {
-    // Revert orientations and UI mode when leaving
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -62,19 +84,18 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _wsSubscription?.cancel();
+    _confettiController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
   void _startDiscovery() {
-    print('DEBUG: Starting discovery stream');
     ref.read(discoveryServiceProvider).discover().listen((service) {
-      print('DEBUG: Discovered service: ${service.name} at ${service.addresses}');
       if (service.addresses != null && service.addresses!.isNotEmpty && !_isConnected) {
         final host = service.addresses!.first.address;
         _connectToHost(host, service.port ?? 8080);
       }
     }, onError: (e) {
-      print('DEBUG: Discovery error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Discovery error: $e')),
       );
@@ -91,7 +112,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 
     ref.read(clientServiceProvider).connect(host, port);
     
-    // Send registration message
     final registration = jsonEncode({
       'type': 'RegisterClient',
       'id': clientId,
@@ -103,21 +123,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 
     _wsSubscription?.cancel();
     _wsSubscription = ref.read(clientServiceProvider).stream.listen((message) {
-      try {
-        final data = jsonDecode(message.toString());
-        if (data['type'] == 'SetStation') {
-          ref.read(stationTagProvider.notifier).state = data['station'];
-          // Notify host back that we changed
-          ref.read(clientServiceProvider).send(jsonEncode({
-            'type': 'StationChanged',
-            'station': data['station'],
-          }));
-        } else {
-          ref.read(clientStateProvider.notifier).handleEvent(message.toString());
-        }
-      } catch (e) {
-        print('Error parsing client event: $e');
-      }
+      _handleIncomingMessage(message.toString());
     });
     setState(() {
       _isConnected = true;
@@ -159,21 +165,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 child: const Text('RE-SCAN FOR HOST'),
               ),
               const SizedBox(height: 16),
-              FutureBuilder<List<NetworkInterface>>(
-                future: NetworkInterface.list(),
-                builder: (context, snapshot) {
-                  final hasBluetooth = snapshot.data?.any((i) => i.name.contains('bt') || i.name.contains('pan')) ?? false;
-                  if (!hasBluetooth) return const SizedBox.shrink();
-                  return const Padding(
-                    padding: EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      'Bluetooth PAN detected.\nIf Host is not found, try Manual Connect.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.blueAccent, fontSize: 12),
-                    ),
-                  );
-                },
-              ),
               TextButton(
                 onPressed: () => _showManualConnectDialog(),
                 child: const Text('MANUAL CONNECT', style: TextStyle(color: Color(0xFF6B7280))),
@@ -184,31 +175,251 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       );
     }
 
-    // Filter tickets based on stationTag
     final filteredTickets = tickets.where((order) {
       if (stationTag == 'GENERAL' || stationTag == 'EXPO') return true;
       return order.items.any((item) => item.stationTag.toUpperCase() == stationTag.toUpperCase());
     }).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF030712),
-      body: Column(
+    final isDark = settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(settings.clientTextScale),
+      ),
+      child: Stack(
         children: [
-          // 4.1 Global Header
-          _buildHeader(stationTag, timeFormat),
-          // 4.2 Ticket Queue
-          Expanded(
-            child: filteredTickets.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-                    itemCount: filteredTickets.length,
-                    itemBuilder: (context, index) => _TicketCard(
-                      order: filteredTickets[index],
-                      stationFilter: stationTag,
-                    ),
+          Scaffold(
+            backgroundColor: settings.clientHighContrast 
+                ? Colors.black 
+                : (settings.themeMode == ThemeMode.light ? Colors.white : const Color(0xFF030712)),
+            body: Column(
+              children: [
+                _buildHeader(stationTag, timeFormat, settings),
+                Expanded(
+                  child: filteredTickets.isEmpty
+                      ? _buildEmptyState(isDark)
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                          itemCount: filteredTickets.length,
+                          itemBuilder: (context, index) {
+                            final ticket = filteredTickets[index];
+                            return TweenAnimationBuilder<double>(
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeOutBack,
+                              tween: Tween(begin: 0.0, end: 1.0),
+                              builder: (context, value, child) {
+                                return Transform.translate(
+                                  offset: Offset(50 * (1 - value), 0),
+                                  child: Opacity(opacity: value, child: child),
+                                );
+                              },
+                              child: _TicketCard(
+                                key: ValueKey(ticket.uuid),
+                                order: ticket,
+                                stationFilter: stationTag,
+                                onFinished: () => _confettiController.play(),
+                                settings: settings,
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          IgnorePointer(
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConfettiWidget(
+                    confettiController: _confettiController,
+                    blastDirection: 0, // right
+                    emissionFrequency: 0.05,
+                    numberOfParticles: 20,
+                    maxBlastForce: 100,
+                    minBlastForce: 80,
+                    colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
                   ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ConfettiWidget(
+                    confettiController: _confettiController,
+                    blastDirection: 3.14, // left
+                    emissionFrequency: 0.05,
+                    numberOfParticles: 20,
+                    maxBlastForce: 100,
+                    minBlastForce: 80,
+                    colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(String station, String timeFormat, AppSettings settings) {
+    final isDark = settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+    final bgColor = settings.clientHighContrast 
+        ? Colors.black 
+        : (settings.themeMode == ThemeMode.light ? Colors.grey.shade200 : const Color(0xFF1F2937));
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    return Container(
+      height: 60,
+      color: bgColor,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: settings.clientHighContrast 
+        ? const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white, width: 2))) 
+        : (settings.themeMode == ThemeMode.light ? BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade300))) : null),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _showStationSelectionDialog(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF22C55E),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    station.toUpperCase(),
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'KDS ACTIVE • $_deviceIp',
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              StreamBuilder(
+                stream: Stream.periodic(const Duration(seconds: 1)),
+                builder: (context, snapshot) {
+                  return Text(
+                    DateFormat(timeFormat).format(DateTime.now()),
+                    style: TextStyle(
+                      color: textColor,
+                      fontFamily: 'monospace',
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: Icon(Icons.settings, color: textColor),
+                onPressed: () => _showClientSettings(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClientSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => Consumer(builder: (context, ref, _) {
+        final settings = ref.watch(settingsProvider);
+        final notifier = ref.read(settingsProvider.notifier);
+        return AlertDialog(
+          backgroundColor: settings.themeMode == ThemeMode.light && !settings.clientHighContrast ? Colors.white : const Color(0xFF1F2937),
+          title: Text('KDS SETTINGS', 
+            style: TextStyle(
+              color: settings.themeMode == ThemeMode.light && !settings.clientHighContrast ? Colors.black : Colors.white, 
+              fontWeight: FontWeight.bold
+            )),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('APPEARANCE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                subtitle: SegmentedButton<ThemeMode>(
+                  segments: const [
+                    ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode)),
+                    ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode)),
+                  ],
+                  selected: {settings.themeMode == ThemeMode.system ? ThemeMode.dark : settings.themeMode},
+                  onSelectionChanged: (val) => notifier.setThemeMode(val.first),
+                ),
+              ),
+              const Divider(),
+              const Text('TEXT SIZE', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+              Slider(
+                value: settings.clientTextScale,
+                min: 0.8,
+                max: 2.0,
+                divisions: 6,
+                activeColor: const Color(0xFF22C55E),
+                onChanged: (val) => notifier.setClientTextScale(val),
+              ),
+              const Text('ALERT VOLUME', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+              Slider(
+                value: settings.clientVolume,
+                min: 0.0,
+                max: 1.0,
+                activeColor: const Color(0xFF22C55E),
+                onChanged: (val) => notifier.setClientVolume(val),
+              ),
+              SwitchListTile(
+                title: Text('HIGH CONTRAST', 
+                  style: TextStyle(
+                    color: settings.themeMode == ThemeMode.light && !settings.clientHighContrast ? Colors.black : Colors.white, 
+                    fontWeight: FontWeight.bold
+                  )),
+                value: settings.clientHighContrast,
+                activeColor: const Color(0xFF22C55E),
+                onChanged: (val) => notifier.setClientHighContrast(val),
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('EXIT KITCHEN MODE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  ref.read(deviceRoleProvider.notifier).state = DeviceRole.unset;
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE')),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    final textColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle_outline, size: 120, color: textColor),
+          const SizedBox(height: 16),
+          Text(
+            'QUEUE EMPTY',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 4,
+            ),
           ),
         ],
       ),
@@ -216,8 +427,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   }
 
   void _showStationSelectionDialog() {
-    // Note: Since clients are offline and Host holds the stations,
-    // we can either hardcode common ones or allow manual entry on the client.
     final controller = TextEditingController(text: ref.read(stationTagProvider));
     showDialog(
       context: context,
@@ -241,77 +450,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
               Navigator.pop(context);
             },
             child: const Text('SAVE', style: TextStyle(color: Color(0xFF22C55E))),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(String station, String timeFormat) {
-    return Container(
-      height: 60,
-      color: const Color(0xFF1F2937),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => _showStationSelectionDialog(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF22C55E),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    station.toUpperCase(),
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                'KDS ACTIVE • $_deviceIp',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-            ],
-          ),
-          StreamBuilder(
-            stream: Stream.periodic(const Duration(seconds: 1)),
-            builder: (context, snapshot) {
-              return Text(
-                DateFormat(timeFormat).format(DateTime.now()),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontFamily: 'monospace',
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.check_circle_outline, size: 120, color: Colors.white.withOpacity(0.05)),
-          const SizedBox(height: 16),
-          Text(
-            'QUEUE EMPTY',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.1),
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 4,
-            ),
           ),
         ],
       ),
@@ -352,13 +490,31 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 class _TicketCard extends ConsumerWidget {
   final ClientOrder order;
   final String stationFilter;
-  const _TicketCard({required this.order, required this.stationFilter});
+  final VoidCallback? onFinished;
+  final AppSettings settings;
+  
+  const _TicketCard({
+    super.key, 
+    required this.order, 
+    required this.stationFilter, 
+    this.onFinished,
+    required this.settings,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOverdue = DateTime.now().difference(order.timestamp).inMinutes > 15;
+    final elapsedMinutes = DateTime.now().difference(order.timestamp).inMinutes;
+    final isDark = settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+
+    Color agingColor;
+    if (elapsedMinutes < 5) {
+      agingColor = const Color(0xFF22C55E); // Green
+    } else if (elapsedMinutes < 10) {
+      agingColor = const Color(0xFFFACC15); // Yellow
+    } else {
+      agingColor = const Color(0xFFDC2626); // Red
+    }
     
-    // Filter items for this ticket based on station
     final displayItems = order.items.where((item) {
       if (stationFilter == 'GENERAL' || stationFilter == 'EXPO') return true;
       return item.stationTag.toUpperCase() == stationFilter.toUpperCase();
@@ -366,26 +522,30 @@ class _TicketCard extends ConsumerWidget {
 
     if (displayItems.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      width: 340,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isOverdue ? const Color(0xFFDC2626) : const Color(0xFF374151),
-          width: 3,
+    return Material(
+      color: settings.clientHighContrast
+          ? Colors.black
+          : (settings.themeMode == ThemeMode.light ? Colors.white : const Color(0xFF1F2937)),
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        width: 340,
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: settings.clientHighContrast ? (elapsedMinutes >= 10 ? const Color(0xFFDC2626) : Colors.white) : agingColor,
+            width: settings.clientHighContrast ? 4 : 3,
+          ),
+          borderRadius: BorderRadius.circular(8),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Ticket Header
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isOverdue ? const Color(0xFFDC2626).withOpacity(0.1) : Colors.transparent,
-              border: const Border(bottom: BorderSide(color: Color(0xFF374151))),
+              color: agingColor.withOpacity(0.1),
+              border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF374151) : Colors.grey.shade300)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,12 +555,12 @@ class _TicketCard extends ConsumerWidget {
                   children: [
                     Text(
                       '#${order.uuid.substring(0, 4).toUpperCase()}',
-                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 28, fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      '${DateTime.now().difference(order.timestamp).inMinutes}m',
+                      '${elapsedMinutes.clamp(0, 999)}m',
                       style: TextStyle(
-                        color: isOverdue ? const Color(0xFFDC2626) : Colors.white,
+                        color: agingColor,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'monospace',
@@ -410,12 +570,11 @@ class _TicketCard extends ConsumerWidget {
                 ),
                 Text(
                   order.customerName.toUpperCase(),
-                  style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.bold),
+                  style: TextStyle(color: isDark ? const Color(0xFF6B7280) : Colors.grey.shade700, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
           ),
-          // Item List
           Expanded(
             child: ListView.builder(
               padding: EdgeInsets.zero,
@@ -429,11 +588,11 @@ class _TicketCard extends ConsumerWidget {
                   },
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 200),
-                    opacity: item.isBumped ? 0.4 : 1.0,
+                    opacity: item.isBumped ? 0.3 : 1.0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                      decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Color(0xFF374151), width: 0.5)),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF374151) : Colors.grey.shade200, width: 0.5)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,15 +602,15 @@ class _TicketCard extends ConsumerWidget {
                               if (item.isBumped)
                                 const Padding(
                                   padding: EdgeInsets.only(right: 8.0),
-                                  child: Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 20),
+                                  child: Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 24),
                                 ),
                               Expanded(
                                 child: Text(
                                   item.name.toUpperCase(),
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? Colors.white : Colors.black87,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
                                     decoration: item.isBumped ? TextDecoration.lineThrough : null,
                                   ),
                                 ),
@@ -459,14 +618,29 @@ class _TicketCard extends ConsumerWidget {
                             ],
                           ),
                           if (item.modifiers.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
+                            Container(
+                              margin: const EdgeInsets.only(top: 8.0),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFACC15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: settings.clientHighContrast ? Border.all(color: Colors.black, width: 2) : null,
+                                boxShadow: [
+                                  if (!settings.clientHighContrast)
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                ],
+                              ),
                               child: Text(
                                 item.modifiers.join(', ').toUpperCase(),
                                 style: const TextStyle(
-                                  color: Color(0xFFFACC15),
+                                  color: Colors.black,
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 14,
+                                  fontSize: 18,
+                                  letterSpacing: 1.1,
                                 ),
                               ),
                             ),
@@ -478,42 +652,39 @@ class _TicketCard extends ConsumerWidget {
               },
             ),
           ),
-          // Ticket Footer
-          _buildFooter(ref, displayItems),
+          _buildFooter(ref, displayItems, isDark),
         ],
       ),
-    );
+    ),);
   }
 
-  Widget _buildFooter(WidgetRef ref, List<ClientItem> items) {
+  Widget _buildFooter(WidgetRef ref, List<ClientItem> items, bool isDark) {
     final allBumped = items.every((i) => i.isBumped);
 
     return InkWell(
       onTap: () {
         HapticFeedback.heavyImpact();
-        if (stationFilter == 'EXPO') {
-           ref.read(clientStateProvider.notifier).removeOrder(order.uuid);
+        if (allBumped) {
+          onFinished?.call();
+          ref.read(clientStateProvider.notifier).removeOrder(order.uuid);
         } else {
-           // For prep stations, maybe just mark all items in THIS station as bumped
-           for(var item in items) {
-              if(!item.isBumped) {
-                 ref.read(clientStateProvider.notifier).toggleItemBump(order.uuid, item.uuid);
-              }
-           }
+          for (var item in items) {
+            if (!item.isBumped) {
+              ref.read(clientStateProvider.notifier).toggleItemBump(order.uuid, item.uuid);
+            }
+          }
         }
       },
       child: Container(
-        height: 60,
-        color: allBumped ? const Color(0xFF22C55E) : const Color(0xFF374151),
+        height: 70,
+        color: allBumped ? const Color(0xFF22C55E) : (isDark ? const Color(0xFF374151) : Colors.grey.shade300),
         alignment: Alignment.center,
         child: Text(
-          stationFilter == 'EXPO' 
-            ? (allBumped ? 'FINISH TICKET' : 'BUMP ALL')
-            : (allBumped ? 'STATION DONE' : 'BUMP ALL'),
+          allBumped ? 'FINISH TICKET' : 'BUMP ALL',
           style: TextStyle(
-            color: allBumped ? Colors.black : Colors.white,
+            color: allBumped ? Colors.black : (isDark ? Colors.white : Colors.black87),
             fontWeight: FontWeight.w900,
-            fontSize: 18,
+            fontSize: 22,
             letterSpacing: 2,
           ),
         ),

@@ -1,4 +1,4 @@
-package com.hoid.kds.openkds
+package com.hoid.kds.dartkds
 
 import io.flutter.embedding.android.FlutterActivity
 

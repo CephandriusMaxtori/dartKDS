@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'views/order_intake_view.dart';
 import 'views/library_view.dart';
-import 'views/sent_queue_view.dart';
-import 'views/settings_view.dart';
+import 'views/inventory_view.dart';
+import 'views/more_view.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/service_providers.dart';
 
@@ -20,9 +20,9 @@ class _HostHomeState extends ConsumerState<HostHome> {
 
   final List<Widget> _views = [
     const OrderIntakeView(),
+    const InventoryView(),
     const LibraryView(),
-    const SentQueueView(),
-    const SettingsView(),
+    const MoreView(),
   ];
 
   @override
@@ -40,8 +40,8 @@ class _HostHomeState extends ConsumerState<HostHome> {
               _currentIndex == 0 
                 ? 'Take Order' 
                 : (_currentIndex == 1 
-                  ? 'Library' 
-                  : (_currentIndex == 2 ? 'Sent Queue' : 'Settings')),
+                  ? 'Inventory' 
+                  : (_currentIndex == 2 ? 'Library' : 'More')),
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ],
@@ -85,9 +85,9 @@ class _HostHomeState extends ConsumerState<HostHome> {
         type: BottomNavigationBarType.fixed, // Use fixed to show label for 4 items
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.add_shopping_cart), label: 'Take Order'),
+          BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Inventory'),
           BottomNavigationBarItem(icon: Icon(Icons.library_books), label: 'Library'),
-          BottomNavigationBarItem(icon: Icon(Icons.send_and_archive), label: 'Sent Queue'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
     );

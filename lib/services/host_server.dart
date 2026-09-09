@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
@@ -19,6 +20,12 @@ class HostServer {
 
   Future<void> start({int port = 8080}) async {
     final router = Router();
+
+    // Serve the Web KDS Client
+    router.get('/', (Request request) async {
+      final html = await rootBundle.loadString('assets/index.html');
+      return Response.ok(html, headers: {'Content-Type': 'text/html'});
+    });
 
     router.get('/ws', webSocketHandler((WebSocketChannel webSocket) {
       String? clientId;

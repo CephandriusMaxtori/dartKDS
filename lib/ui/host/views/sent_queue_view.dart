@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../models/database.dart';
+import '../../../models/item_status.dart';
 import '../../../providers/service_providers.dart';
 import '../../../providers/settings_provider.dart';
 
@@ -13,6 +16,7 @@ class SentQueueView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(databaseProvider);
     final settings = ref.watch(settingsProvider);
+    final server = ref.watch(hostServerProvider);
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
 
     return StreamBuilder<List<KDSOrderData>>(
@@ -58,9 +62,28 @@ class SentQueueView extends ConsumerWidget {
                           'Order #${order.uuid.substring(0, 4).toUpperCase()}',
                           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                         ),
-                        Text(
-                          DateFormat(timeFormat).format(order.timestamp),
-                          style: const TextStyle(color: Color(0xFF6B7280), fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                        Row(
+                          children: [
+                            Text(
+                              DateFormat(timeFormat).format(order.timestamp),
+                              style: const TextStyle(color: Color(0xFF6B7280), fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => _recallOrder(context, db, server, order),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2563EB).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'RECALL',
+                                  style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w900, fontSize: 10),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -73,18 +96,36 @@ class SentQueueView extends ConsumerWidget {
                       builder: (context, itemSnapshot) {
                         if (!itemSnapshot.hasData) return const SizedBox.shrink();
                         final items = itemSnapshot.data!;
+                        final orderTotal = items.fold<double>(0, (sum, item) => sum + item.price);
+                        
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: items.map((i) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4.0),
-                            child: Row(
+                          children: [
+                            ...items.map((i) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.check_circle, size: 14, color: Color(0xFF22C55E)),
+                                      const SizedBox(width: 8),
+                                      Text(i.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                  Text('\$${i.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                ],
+                              ),
+                            )),
+                            const Divider(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Icon(Icons.check_circle, size: 14, color: Color(0xFF22C55E)),
-                                const SizedBox(width: 8),
-                                Text(i.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF6B7280))),
+                                Text('\$${orderTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF2563EB))),
                               ],
                             ),
-                          )).toList(),
+                          ],
                         );
                       },
                     ),
@@ -96,5 +137,42 @@ class SentQueueView extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _recallOrder(BuildContext context, KDSDatabase db, dynamic server, KDSOrderData order) async {
+    HapticFeedback.mediumImpact();
+    
+    final items = await (db.select(db.kDSItems)..where((t) => t.orderUuid.equals(order.uuid))).get();
+    
+    final List<Map<String, dynamic>> jsonItems = items.map((i) => {
+      'uuid': i.uuid,
+      'name': i.name,
+      'modifiers': i.modifiers,
+      'stationTag': i.stationTag,
+      'status': ItemStatus.pending.index, // Reset to pending for the KDS
+      'price': i.price,
+    }).toList();
+
+    final broadcastPayload = jsonEncode({
+      'type': 'OrderCreated',
+      'order': {
+        'uuid': order.uuid,
+        'customerName': order.customerName,
+        'timestamp': order.timestamp.toIso8601String(),
+        'status': order.status.index,
+        'items': jsonItems,
+      }
+    });
+
+    server.broadcast(broadcastPayload);
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sent Order #${order.uuid.substring(0, 4).toUpperCase()} back to Kitchen'),
+          backgroundColor: const Color(0xFF2563EB),
+        ),
+      );
+    }
   }
 }
