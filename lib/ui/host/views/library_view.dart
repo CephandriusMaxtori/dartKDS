@@ -21,6 +21,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   final _nameController = TextEditingController();
   final _modifiersController = TextEditingController();
   final _requiredModifiersController = TextEditingController();
+  final _tagsController = TextEditingController();
   final _stationController = TextEditingController();
   final _globalModifierController = TextEditingController();
   final _priceController = TextEditingController();
@@ -33,6 +34,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     _nameController.dispose();
     _modifiersController.dispose();
     _requiredModifiersController.dispose();
+    _tagsController.dispose();
     _stationController.dispose();
     _globalModifierController.dispose();
     _priceController.dispose();
@@ -127,6 +129,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                       const SizedBox(height: 12),
                       _buildTextField(_requiredModifiersController, 'Required Modifiers', hint: 'Rare, Medium, Well'),
                       const SizedBox(height: 12),
+                      _buildTextField(_tagsController, 'Tags (for menu filters)', hint: 'Gluten Free, Spicy, Chef Special'),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: _selectedStation,
                         decoration: _inputDecoration('Routing Station'),
@@ -134,13 +138,16 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                         onChanged: (val) => setState(() => _selectedStation = val),
                       ),
                       const SizedBox(height: 12),
-                      SwitchListTile(
-                        title: const Text('TRACK INVENTORY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.5)),
-                        value: _trackStock,
-                        onChanged: (val) => setState(() => _trackStock = val),
-                        activeColor: const Color(0xFF111111),
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
+                      Material(
+                        color: Colors.transparent,
+                        child: SwitchListTile(
+                          title: const Text('TRACK INVENTORY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.5)),
+                          value: _trackStock,
+                          onChanged: (val) => setState(() => _trackStock = val),
+                          activeColor: const Color(0xFF111111),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
                       ),
                       if (_trackStock) ...[
                         const SizedBox(height: 8),
@@ -159,12 +166,14 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           if (_nameController.text.isNotEmpty && _selectedStation != null) {
                             final mods = _modifiersController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                             final reqs = _requiredModifiersController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                            final tags = _tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                             await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
                                   name: _nameController.text,
                                   category: 'All Items',
                                   defaultStation: _selectedStation!,
                                   modifiers: mods,
                                   requiredModifiers: drift.Value(reqs),
+                                  tags: drift.Value(tags),
                                   price: drift.Value(double.tryParse(_priceController.text) ?? 0.0),
                                   stockQuantity: drift.Value(int.tryParse(_stockController.text) ?? 0),
                                   trackStock: drift.Value(_trackStock),
@@ -172,6 +181,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             _nameController.clear();
                             _modifiersController.clear();
                             _requiredModifiersController.clear();
+                            _tagsController.clear();
                             _priceController.clear();
                             _stockController.clear();
                             setState(() => _trackStock = false);
@@ -210,12 +220,26 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 8.0),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildTag(item.defaultStation.toUpperCase(), const Color(0xFFF3F4F6), const Color(0xFF666666)),
-                                if (item.trackStock) _buildTag('STOCK: ${item.stockQuantity}', const Color(0xFFFFF7ED), const Color(0xFFC2410C)),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    _buildTag(item.defaultStation.toUpperCase(), const Color(0xFFF3F4F6), const Color(0xFF666666)),
+                                    if (item.trackStock) _buildTag('STOCK: ${item.stockQuantity}', const Color(0xFFFFF7ED), const Color(0xFFC2410C)),
+                                    ...item.tags.map((t) => _buildTag(t, const Color(0xFFEFF6FF), const Color(0xFF2563EB))),
+                                  ],
+                                ),
+                                if ((item.requiredModifiers ?? []).isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text(
+                                      'REQUIRED: ${(item.requiredModifiers ?? []).join(", ")}',
+                                      style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -327,15 +351,25 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 final station = stations[index];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: theme.dividerColor)),
-                  child: ListTile(
-                    title: Text(station.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditStationDialog(context, db, station)),
-                        IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent), onPressed: () => (db.delete(db.stations)..where((t) => t.id.equals(station.id))).go()),
-                      ],
+                  child: Material(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    clipBehavior: Clip.antiAlias,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: theme.dividerColor),
+                      ),
+                      child: ListTile(
+                        title: Text(station.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showEditStationDialog(context, db, station)),
+                            IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent), onPressed: () => (db.delete(db.stations)..where((t) => t.id.equals(station.id))).go()),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -390,10 +424,20 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                   final mod = mods[index];
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: theme.dividerColor)),
-                    child: ListTile(
-                      title: Text(mod.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                      trailing: IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => (db.delete(db.globalModifiers)..where((t) => t.id.equals(mod.id))).go()),
+                    child: Material(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      clipBehavior: Clip.antiAlias,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.dividerColor),
+                        ),
+                        child: ListTile(
+                          title: Text(mod.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                          trailing: IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => (db.delete(db.globalModifiers)..where((t) => t.id.equals(mod.id))).go()),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -411,24 +455,32 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       children: [
         const Text('SYSTEM BACKUP', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Color(0xFF666666), letterSpacing: 1.2)),
         const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: theme.dividerColor)),
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.download_rounded, color: Color(0xFF2563EB)),
-                title: const Text('EXPORT LIBRARY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                subtitle: const Text('Backup menu, stations, and modifiers', style: TextStyle(fontSize: 11)),
-                onTap: () => _exportLibrary(db),
-              ),
-              Divider(height: 1, color: theme.dividerColor),
-              ListTile(
-                leading: const Icon(Icons.upload_rounded, color: Color(0xFF22C55E)),
-                title: const Text('IMPORT LIBRARY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                subtitle: const Text('Restore from a backup file', style: TextStyle(fontSize: 11)),
-                onTap: () => _importLibrary(db),
-              ),
-            ],
+        Material(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.download_rounded, color: Color(0xFF2563EB)),
+                  title: const Text('EXPORT LIBRARY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                  subtitle: const Text('Backup menu, stations, and modifiers', style: TextStyle(fontSize: 11)),
+                  onTap: () => _exportLibrary(db),
+                ),
+                Divider(height: 1, color: theme.dividerColor),
+                ListTile(
+                  leading: const Icon(Icons.upload_rounded, color: Color(0xFF22C55E)),
+                  title: const Text('IMPORT LIBRARY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                  subtitle: const Text('Restore from a backup file', style: TextStyle(fontSize: 11)),
+                  onTap: () => _importLibrary(db),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -442,7 +494,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       final modifiers = await db.select(db.globalModifiers).get();
       final data = {
         'version': 1,
-        'menuItems': items.map((i) => {'name': i.name, 'category': i.category, 'defaultStation': i.defaultStation, 'modifiers': i.modifiers, 'requiredModifiers': i.requiredModifiers, 'price': i.price, 'stockQuantity': i.stockQuantity, 'trackStock': i.trackStock}).toList(),
+        'menuItems': items.map((i) => {'name': i.name, 'category': i.category, 'defaultStation': i.defaultStation, 'modifiers': i.modifiers, 'requiredModifiers': i.requiredModifiers, 'tags': i.tags, 'price': i.price, 'stockQuantity': i.stockQuantity, 'trackStock': i.trackStock}).toList(),
         'stations': stations.map((s) => {'name': s.name}).toList(),
         'globalModifiers': modifiers.map((m) => {'name': m.name}).toList(),
       };
@@ -463,7 +515,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
         await db.transaction(() async {
           for (var s in data['stations']) await db.into(db.stations).insertOnConflictUpdate(StationsCompanion.insert(name: s['name']));
           for (var m in data['globalModifiers']) await db.into(db.globalModifiers).insertOnConflictUpdate(GlobalModifiersCompanion.insert(name: m['name']));
-          for (var i in data['menuItems']) await db.into(db.menuItems).insert(MenuItemsCompanion.insert(name: i['name'], category: i['category'], defaultStation: i['defaultStation'], modifiers: List<String>.from(i['modifiers']), requiredModifiers: drift.Value(i['requiredModifiers'] != null ? List<String>.from(i['requiredModifiers']) : <String>[]), price: drift.Value(i['price'] ?? 0.0), stockQuantity: drift.Value(i['stockQuantity'] ?? 0), trackStock: drift.Value(i['trackStock'] ?? false)));
+          for (var i in data['menuItems']) await db.into(db.menuItems).insert(MenuItemsCompanion.insert(name: i['name'], category: i['category'], defaultStation: i['defaultStation'], modifiers: List<String>.from(i['modifiers']), requiredModifiers: drift.Value(i['requiredModifiers'] != null ? List<String>.from(i['requiredModifiers']) : <String>[]), tags: drift.Value(i['tags'] != null ? List<String>.from(i['tags']) : <String>[]), price: drift.Value(i['price'] ?? 0.0), stockQuantity: drift.Value(i['stockQuantity'] ?? 0), trackStock: drift.Value(i['trackStock'] ?? false)));
         });
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import Successful')));
       }
@@ -502,6 +554,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     final nameCtrl = TextEditingController(text: item.name);
     final modCtrl = TextEditingController(text: item.modifiers.join(', '));
     final reqModCtrl = TextEditingController(text: (item.requiredModifiers ?? []).join(', '));
+    final tagsCtrl = TextEditingController(text: item.tags.join(', '));
     final priceCtrl = TextEditingController(text: item.price.toString());
     final stockCtrl = TextEditingController(text: item.stockQuantity.toString());
     bool trackStock = item.trackStock;
@@ -526,6 +579,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 const SizedBox(height: 12),
                 _buildTextField(reqModCtrl, 'Required Modifiers'),
                 const SizedBox(height: 12),
+                _buildTextField(tagsCtrl, 'Tags (for menu filters)'),
+                const SizedBox(height: 12),
                 SwitchListTile(title: const Text('TRACK INVENTORY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)), value: trackStock, onChanged: (val) => setDialogState(() => trackStock = val), contentPadding: EdgeInsets.zero),
                 if (trackStock) _buildTextField(stockCtrl, 'Current Stock', keyboard: TextInputType.number),
                 const SizedBox(height: 12),
@@ -544,7 +599,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF111111), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
               onPressed: () async {
                 if (nameCtrl.text.isNotEmpty) {
-                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock)));
+                  final tags = tagsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), tags: drift.Value(tags), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock)));
                   if (context.mounted) Navigator.pop(context);
                 }
               },

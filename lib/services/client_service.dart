@@ -3,14 +3,21 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class ClientService {
   WebSocketChannel? _channel;
 
-  void connect(String host, int port) {
-    _channel = WebSocketChannel.connect(Uri.parse('ws://$host:$port/ws'));
+  Future<void> connect(String host, int port) async {
+    final channel = WebSocketChannel.connect(Uri.parse('ws://$host:$port/ws'));
+    _channel = channel;
+    // Completes once the socket is open, errors if the host is unreachable.
+    await channel.ready;
   }
 
   Stream get stream => _channel?.stream ?? const Stream.empty();
 
   void send(dynamic message) {
-    _channel?.sink.add(message);
+    try {
+      _channel?.sink.add(message);
+    } catch (_) {
+      // Socket may already be closed; ignore.
+    }
   }
 
   void disconnect() {

@@ -296,6 +296,9 @@ late final GeneratedColumn<double> price = GeneratedColumn<double>('price', alia
 static const VerificationMeta _requiredModifiersMeta = const VerificationMeta('requiredModifiers');
 @override
 late final GeneratedColumnWithTypeConverter<List<String>, String> requiredModifiers = GeneratedColumn<String>('required_modifiers', aliasedName, true, type: DriftSqlType.string, requiredDuringInsert: false).withConverter<List<String>>($MenuItemsTable.$converterrequiredModifiers);
+static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
+@override
+late final GeneratedColumnWithTypeConverter<List<String>, String> tags = GeneratedColumn<String>('tags', aliasedName, true, type: DriftSqlType.string, requiredDuringInsert: false).withConverter<List<String>>($MenuItemsTable.$convertertags);
 static const VerificationMeta _stockQuantityMeta = const VerificationMeta('stockQuantity');
 @override
 late final GeneratedColumn<int> stockQuantity = GeneratedColumn<int>('stock_quantity', aliasedName, false, type: DriftSqlType.int, requiredDuringInsert: false, defaultValue: const Constant(0));
@@ -303,7 +306,7 @@ static const VerificationMeta _trackStockMeta = const VerificationMeta('trackSto
 @override
 late final GeneratedColumn<bool> trackStock = GeneratedColumn<bool>('track_stock', aliasedName, false, type: DriftSqlType.bool, requiredDuringInsert: false, defaultConstraints: GeneratedColumn.constraintIsAlways('CHECK ("track_stock" IN (0, 1))'), defaultValue: const Constant(false));
 @override
-List<GeneratedColumn> get $columns => [id, name, category, defaultStation, modifiers, price, requiredModifiers, stockQuantity, trackStock];
+List<GeneratedColumn> get $columns => [id, name, category, defaultStation, modifiers, price, requiredModifiers, tags, stockQuantity, trackStock];
 @override
 String get aliasedName => _alias ?? actualTableName;
 @override
@@ -327,18 +330,18 @@ context.handle(_defaultStationMeta, defaultStation.isAcceptableOrUnknown(data['d
 context.missing(_defaultStationMeta);
 }
 context.handle(_modifiersMeta, const VerificationResult.success());if (data.containsKey('price')) {
-context.handle(_priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));}context.handle(_requiredModifiersMeta, const VerificationResult.success());if (data.containsKey('stock_quantity')) {
+context.handle(_priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));}context.handle(_requiredModifiersMeta, const VerificationResult.success());context.handle(_tagsMeta, const VerificationResult.success());if (data.containsKey('stock_quantity')) {
 context.handle(_stockQuantityMeta, stockQuantity.isAcceptableOrUnknown(data['stock_quantity']!, _stockQuantityMeta));}if (data.containsKey('track_stock')) {
 context.handle(_trackStockMeta, trackStock.isAcceptableOrUnknown(data['track_stock']!, _trackStockMeta));}return context;
 }
 @override
 Set<GeneratedColumn> get $primaryKey => {id};
 @override MenuItemData map(Map<String, dynamic> data, {String? tablePrefix})  {
-final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';return MenuItemData(id: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}id'])!, name: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}name'])!, category: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}category'])!, defaultStation: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}default_station'])!, modifiers: $MenuItemsTable.$convertermodifiers.fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}modifiers'])!), price: attachedDatabase.typeMapping.read(DriftSqlType.double, data['${effectivePrefix}price'])!, requiredModifiers: $MenuItemsTable.$converterrequiredModifiers.fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}required_modifiers'])), stockQuantity: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}stock_quantity'])!, trackStock: attachedDatabase.typeMapping.read(DriftSqlType.bool, data['${effectivePrefix}track_stock'])!, );
+final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';return MenuItemData(id: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}id'])!, name: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}name'])!, category: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}category'])!, defaultStation: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}default_station'])!, modifiers: $MenuItemsTable.$convertermodifiers.fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}modifiers'])!), price: attachedDatabase.typeMapping.read(DriftSqlType.double, data['${effectivePrefix}price'])!, requiredModifiers: $MenuItemsTable.$converterrequiredModifiers.fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}required_modifiers'])), tags: $MenuItemsTable.$convertertags.fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}tags'])), stockQuantity: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}stock_quantity'])!, trackStock: attachedDatabase.typeMapping.read(DriftSqlType.bool, data['${effectivePrefix}track_stock'])!, );
 }
 @override
 $MenuItemsTable createAlias(String alias) {
-return $MenuItemsTable(attachedDatabase, alias);}static TypeConverter<List<String>,String> $convertermodifiers = const ListStringConverter();static TypeConverter<List<String>,String?> $converterrequiredModifiers = const NullableListStringConverter();}class MenuItemData extends DataClass implements Insertable<MenuItemData> 
+return $MenuItemsTable(attachedDatabase, alias);}static TypeConverter<List<String>,String> $convertermodifiers = const ListStringConverter();static TypeConverter<List<String>,String?> $converterrequiredModifiers = const NullableListStringConverter();static TypeConverter<List<String>,String?> $convertertags = const NullableListStringConverter();}class MenuItemData extends DataClass implements Insertable<MenuItemData> 
 {
 final int id;
 final String name;
@@ -347,9 +350,10 @@ final String defaultStation;
 final List<String> modifiers;
 final double price;
 final List<String> requiredModifiers;
+final List<String> tags;
 final int stockQuantity;
 final bool trackStock;
-const MenuItemData({required this.id, required this.name, required this.category, required this.defaultStation, required this.modifiers, required this.price, required this.requiredModifiers, required this.stockQuantity, required this.trackStock});@override
+const MenuItemData({required this.id, required this.name, required this.category, required this.defaultStation, required this.modifiers, required this.price, required this.requiredModifiers, required this.tags, required this.stockQuantity, required this.trackStock});@override
 Map<String, Expression> toColumns(bool nullToAbsent) {
 final map = <String, Expression> {};map['id'] = Variable<int>(id);
 map['name'] = Variable<String>(name);
@@ -358,28 +362,29 @@ map['default_station'] = Variable<String>(defaultStation);
 {map['modifiers'] = Variable<String>($MenuItemsTable.$convertermodifiers.toSql(modifiers));
 }map['price'] = Variable<double>(price);
 {map['required_modifiers'] = Variable<String>($MenuItemsTable.$converterrequiredModifiers.toSql(requiredModifiers));
+}{map['tags'] = Variable<String>($MenuItemsTable.$convertertags.toSql(tags));
 }map['stock_quantity'] = Variable<int>(stockQuantity);
 map['track_stock'] = Variable<bool>(trackStock);
 return map; 
 }
 MenuItemsCompanion toCompanion(bool nullToAbsent) {
-return MenuItemsCompanion(id: Value(id),name: Value(name),category: Value(category),defaultStation: Value(defaultStation),modifiers: Value(modifiers),price: Value(price),requiredModifiers: Value(requiredModifiers),stockQuantity: Value(stockQuantity),trackStock: Value(trackStock),);
+return MenuItemsCompanion(id: Value(id),name: Value(name),category: Value(category),defaultStation: Value(defaultStation),modifiers: Value(modifiers),price: Value(price),requiredModifiers: Value(requiredModifiers),tags: Value(tags),stockQuantity: Value(stockQuantity),trackStock: Value(trackStock),);
 }
 factory MenuItemData.fromJson(Map<String, dynamic> json, {ValueSerializer? serializer}) {
 serializer ??= driftRuntimeOptions.defaultSerializer;
-return MenuItemData(id: serializer.fromJson<int>(json['id']),name: serializer.fromJson<String>(json['name']),category: serializer.fromJson<String>(json['category']),defaultStation: serializer.fromJson<String>(json['defaultStation']),modifiers: serializer.fromJson<List<String>>(json['modifiers']),price: serializer.fromJson<double>(json['price']),requiredModifiers: serializer.fromJson<List<String>>(json['requiredModifiers']),stockQuantity: serializer.fromJson<int>(json['stockQuantity']),trackStock: serializer.fromJson<bool>(json['trackStock']),);}
+return MenuItemData(id: serializer.fromJson<int>(json['id']),name: serializer.fromJson<String>(json['name']),category: serializer.fromJson<String>(json['category']),defaultStation: serializer.fromJson<String>(json['defaultStation']),modifiers: serializer.fromJson<List<String>>(json['modifiers']),price: serializer.fromJson<double>(json['price']),requiredModifiers: serializer.fromJson<List<String>>(json['requiredModifiers']),tags: serializer.fromJson<List<String>>(json['tags']),stockQuantity: serializer.fromJson<int>(json['stockQuantity']),trackStock: serializer.fromJson<bool>(json['trackStock']),);}
 @override Map<String, dynamic> toJson({ValueSerializer? serializer}) {
 serializer ??= driftRuntimeOptions.defaultSerializer;
 return <String, dynamic>{
-'id': serializer.toJson<int>(id),'name': serializer.toJson<String>(name),'category': serializer.toJson<String>(category),'defaultStation': serializer.toJson<String>(defaultStation),'modifiers': serializer.toJson<List<String>>(modifiers),'price': serializer.toJson<double>(price),'requiredModifiers': serializer.toJson<List<String>>(requiredModifiers),'stockQuantity': serializer.toJson<int>(stockQuantity),'trackStock': serializer.toJson<bool>(trackStock),};}MenuItemData copyWith({int? id,String? name,String? category,String? defaultStation,List<String>? modifiers,double? price,List<String>? requiredModifiers,int? stockQuantity,bool? trackStock}) => MenuItemData(id: id ?? this.id,name: name ?? this.name,category: category ?? this.category,defaultStation: defaultStation ?? this.defaultStation,modifiers: modifiers ?? this.modifiers,price: price ?? this.price,requiredModifiers: requiredModifiers ?? this.requiredModifiers,stockQuantity: stockQuantity ?? this.stockQuantity,trackStock: trackStock ?? this.trackStock,);MenuItemData copyWithCompanion(MenuItemsCompanion data) {
+'id': serializer.toJson<int>(id),'name': serializer.toJson<String>(name),'category': serializer.toJson<String>(category),'defaultStation': serializer.toJson<String>(defaultStation),'modifiers': serializer.toJson<List<String>>(modifiers),'price': serializer.toJson<double>(price),'requiredModifiers': serializer.toJson<List<String>>(requiredModifiers),'tags': serializer.toJson<List<String>>(tags),'stockQuantity': serializer.toJson<int>(stockQuantity),'trackStock': serializer.toJson<bool>(trackStock),};}MenuItemData copyWith({int? id,String? name,String? category,String? defaultStation,List<String>? modifiers,double? price,List<String>? requiredModifiers,List<String>? tags,int? stockQuantity,bool? trackStock}) => MenuItemData(id: id ?? this.id,name: name ?? this.name,category: category ?? this.category,defaultStation: defaultStation ?? this.defaultStation,modifiers: modifiers ?? this.modifiers,price: price ?? this.price,requiredModifiers: requiredModifiers ?? this.requiredModifiers,tags: tags ?? this.tags,stockQuantity: stockQuantity ?? this.stockQuantity,trackStock: trackStock ?? this.trackStock,);MenuItemData copyWithCompanion(MenuItemsCompanion data) {
 return MenuItemData(
-id: data.id.present ? data.id.value : this.id,name: data.name.present ? data.name.value : this.name,category: data.category.present ? data.category.value : this.category,defaultStation: data.defaultStation.present ? data.defaultStation.value : this.defaultStation,modifiers: data.modifiers.present ? data.modifiers.value : this.modifiers,price: data.price.present ? data.price.value : this.price,requiredModifiers: data.requiredModifiers.present ? data.requiredModifiers.value : this.requiredModifiers,stockQuantity: data.stockQuantity.present ? data.stockQuantity.value : this.stockQuantity,trackStock: data.trackStock.present ? data.trackStock.value : this.trackStock,);
+id: data.id.present ? data.id.value : this.id,name: data.name.present ? data.name.value : this.name,category: data.category.present ? data.category.value : this.category,defaultStation: data.defaultStation.present ? data.defaultStation.value : this.defaultStation,modifiers: data.modifiers.present ? data.modifiers.value : this.modifiers,price: data.price.present ? data.price.value : this.price,requiredModifiers: data.requiredModifiers.present ? data.requiredModifiers.value : this.requiredModifiers,tags: data.tags.present ? data.tags.value : this.tags,stockQuantity: data.stockQuantity.present ? data.stockQuantity.value : this.stockQuantity,trackStock: data.trackStock.present ? data.trackStock.value : this.trackStock,);
 }
 @override
-String toString() {return (StringBuffer('MenuItemData(')..write('id: $id, ')..write('name: $name, ')..write('category: $category, ')..write('defaultStation: $defaultStation, ')..write('modifiers: $modifiers, ')..write('price: $price, ')..write('requiredModifiers: $requiredModifiers, ')..write('stockQuantity: $stockQuantity, ')..write('trackStock: $trackStock')..write(')')).toString();}
+String toString() {return (StringBuffer('MenuItemData(')..write('id: $id, ')..write('name: $name, ')..write('category: $category, ')..write('defaultStation: $defaultStation, ')..write('modifiers: $modifiers, ')..write('price: $price, ')..write('requiredModifiers: $requiredModifiers, ')..write('tags: $tags, ')..write('stockQuantity: $stockQuantity, ')..write('trackStock: $trackStock')..write(')')).toString();}
 @override
- int get hashCode => Object.hash(id, name, category, defaultStation, modifiers, price, requiredModifiers, stockQuantity, trackStock);@override
-bool operator ==(Object other) => identical(this, other) || (other is MenuItemData && other.id == this.id && other.name == this.name && other.category == this.category && other.defaultStation == this.defaultStation && other.modifiers == this.modifiers && other.price == this.price && other.requiredModifiers == this.requiredModifiers && other.stockQuantity == this.stockQuantity && other.trackStock == this.trackStock);
+ int get hashCode => Object.hash(id, name, category, defaultStation, modifiers, price, requiredModifiers, tags, stockQuantity, trackStock);@override
+bool operator ==(Object other) => identical(this, other) || (other is MenuItemData && other.id == this.id && other.name == this.name && other.category == this.category && other.defaultStation == this.defaultStation && other.modifiers == this.modifiers && other.price == this.price && other.requiredModifiers == this.requiredModifiers && other.tags == this.tags && other.stockQuantity == this.stockQuantity && other.trackStock == this.trackStock);
 }class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
 final Value<int> id;
 final Value<String> name;
@@ -388,10 +393,11 @@ final Value<String> defaultStation;
 final Value<List<String>> modifiers;
 final Value<double> price;
 final Value<List<String>> requiredModifiers;
+final Value<List<String>> tags;
 final Value<int> stockQuantity;
 final Value<bool> trackStock;
-const MenuItemsCompanion({this.id = const Value.absent(),this.name = const Value.absent(),this.category = const Value.absent(),this.defaultStation = const Value.absent(),this.modifiers = const Value.absent(),this.price = const Value.absent(),this.requiredModifiers = const Value.absent(),this.stockQuantity = const Value.absent(),this.trackStock = const Value.absent(),});
-MenuItemsCompanion.insert({this.id = const Value.absent(),required String name,required String category,required String defaultStation,required List<String> modifiers,this.price = const Value.absent(),this.requiredModifiers = const Value.absent(),this.stockQuantity = const Value.absent(),this.trackStock = const Value.absent(),}): name = Value(name), category = Value(category), defaultStation = Value(defaultStation), modifiers = Value(modifiers);
+const MenuItemsCompanion({this.id = const Value.absent(),this.name = const Value.absent(),this.category = const Value.absent(),this.defaultStation = const Value.absent(),this.modifiers = const Value.absent(),this.price = const Value.absent(),this.requiredModifiers = const Value.absent(),this.tags = const Value.absent(),this.stockQuantity = const Value.absent(),this.trackStock = const Value.absent(),});
+MenuItemsCompanion.insert({this.id = const Value.absent(),required String name,required String category,required String defaultStation,required List<String> modifiers,this.price = const Value.absent(),this.requiredModifiers = const Value.absent(),this.tags = const Value.absent(),this.stockQuantity = const Value.absent(),this.trackStock = const Value.absent(),}): name = Value(name), category = Value(category), defaultStation = Value(defaultStation), modifiers = Value(modifiers);
 static Insertable<MenuItemData> custom({Expression<int>? id, 
 Expression<String>? name, 
 Expression<String>? category, 
@@ -399,12 +405,13 @@ Expression<String>? defaultStation,
 Expression<String>? modifiers, 
 Expression<double>? price, 
 Expression<String>? requiredModifiers, 
+Expression<String>? tags, 
 Expression<int>? stockQuantity, 
 Expression<bool>? trackStock, 
 }) {
-return RawValuesInsertable({if (id != null)'id': id,if (name != null)'name': name,if (category != null)'category': category,if (defaultStation != null)'default_station': defaultStation,if (modifiers != null)'modifiers': modifiers,if (price != null)'price': price,if (requiredModifiers != null)'required_modifiers': requiredModifiers,if (stockQuantity != null)'stock_quantity': stockQuantity,if (trackStock != null)'track_stock': trackStock,});
-}MenuItemsCompanion copyWith({Value<int>? id, Value<String>? name, Value<String>? category, Value<String>? defaultStation, Value<List<String>>? modifiers, Value<double>? price, Value<List<String>>? requiredModifiers, Value<int>? stockQuantity, Value<bool>? trackStock}) {
-return MenuItemsCompanion(id: id ?? this.id,name: name ?? this.name,category: category ?? this.category,defaultStation: defaultStation ?? this.defaultStation,modifiers: modifiers ?? this.modifiers,price: price ?? this.price,requiredModifiers: requiredModifiers ?? this.requiredModifiers,stockQuantity: stockQuantity ?? this.stockQuantity,trackStock: trackStock ?? this.trackStock,);
+return RawValuesInsertable({if (id != null)'id': id,if (name != null)'name': name,if (category != null)'category': category,if (defaultStation != null)'default_station': defaultStation,if (modifiers != null)'modifiers': modifiers,if (price != null)'price': price,if (requiredModifiers != null)'required_modifiers': requiredModifiers,if (tags != null)'tags': tags,if (stockQuantity != null)'stock_quantity': stockQuantity,if (trackStock != null)'track_stock': trackStock,});
+}MenuItemsCompanion copyWith({Value<int>? id, Value<String>? name, Value<String>? category, Value<String>? defaultStation, Value<List<String>>? modifiers, Value<double>? price, Value<List<String>>? requiredModifiers, Value<List<String>>? tags, Value<int>? stockQuantity, Value<bool>? trackStock}) {
+return MenuItemsCompanion(id: id ?? this.id,name: name ?? this.name,category: category ?? this.category,defaultStation: defaultStation ?? this.defaultStation,modifiers: modifiers ?? this.modifiers,price: price ?? this.price,requiredModifiers: requiredModifiers ?? this.requiredModifiers,tags: tags ?? this.tags,stockQuantity: stockQuantity ?? this.stockQuantity,trackStock: trackStock ?? this.trackStock,);
 }
 @override
 Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -422,6 +429,8 @@ if (price.present) {
 map['price'] = Variable<double>(price.value);}
 if (requiredModifiers.present) {
 map['required_modifiers'] = Variable<String>($MenuItemsTable.$converterrequiredModifiers.toSql(requiredModifiers.value));}
+if (tags.present) {
+map['tags'] = Variable<String>($MenuItemsTable.$convertertags.toSql(tags.value));}
 if (stockQuantity.present) {
 map['stock_quantity'] = Variable<int>(stockQuantity.value);}
 if (trackStock.present) {
@@ -429,7 +438,7 @@ map['track_stock'] = Variable<bool>(trackStock.value);}
 return map; 
 }
 @override
-String toString() {return (StringBuffer('MenuItemsCompanion(')..write('id: $id, ')..write('name: $name, ')..write('category: $category, ')..write('defaultStation: $defaultStation, ')..write('modifiers: $modifiers, ')..write('price: $price, ')..write('requiredModifiers: $requiredModifiers, ')..write('stockQuantity: $stockQuantity, ')..write('trackStock: $trackStock')..write(')')).toString();}
+String toString() {return (StringBuffer('MenuItemsCompanion(')..write('id: $id, ')..write('name: $name, ')..write('category: $category, ')..write('defaultStation: $defaultStation, ')..write('modifiers: $modifiers, ')..write('price: $price, ')..write('requiredModifiers: $requiredModifiers, ')..write('tags: $tags, ')..write('stockQuantity: $stockQuantity, ')..write('trackStock: $trackStock')..write(')')).toString();}
 }
 class $StationsTable extends Stations with TableInfo<$StationsTable, StationData>{
 @override final GeneratedDatabase attachedDatabase;
@@ -1120,8 +1129,8 @@ GeneratedColumn<double> get price => $composableBuilder(
     (KDSItemData,$$KDSItemsTableReferences),
     KDSItemData,
     PrefetchHooks Function({bool orderUuid})
-    >;typedef $$MenuItemsTableCreateCompanionBuilder = MenuItemsCompanion Function({Value<int> id,required String name,required String category,required String defaultStation,required List<String> modifiers,Value<double> price,Value<List<String>> requiredModifiers,Value<int> stockQuantity,Value<bool> trackStock,});
-typedef $$MenuItemsTableUpdateCompanionBuilder = MenuItemsCompanion Function({Value<int> id,Value<String> name,Value<String> category,Value<String> defaultStation,Value<List<String>> modifiers,Value<double> price,Value<List<String>> requiredModifiers,Value<int> stockQuantity,Value<bool> trackStock,});
+    >;typedef $$MenuItemsTableCreateCompanionBuilder = MenuItemsCompanion Function({Value<int> id,required String name,required String category,required String defaultStation,required List<String> modifiers,Value<double> price,Value<List<String>> requiredModifiers,Value<List<String>> tags,Value<int> stockQuantity,Value<bool> trackStock,});
+typedef $$MenuItemsTableUpdateCompanionBuilder = MenuItemsCompanion Function({Value<int> id,Value<String> name,Value<String> category,Value<String> defaultStation,Value<List<String>> modifiers,Value<double> price,Value<List<String>> requiredModifiers,Value<List<String>> tags,Value<int> stockQuantity,Value<bool> trackStock,});
 class $$MenuItemsTableFilterComposer extends Composer<
         _$KDSDatabase,
         $MenuItemsTable> {
@@ -1164,6 +1173,11 @@ ColumnFilters<double> get price => $composableBuilder(
       
           ColumnWithTypeConverterFilters<List<String>,List<String>,String> get requiredModifiers => $composableBuilder(
       column: $table.requiredModifiers,
+      builder: (column) => 
+      ColumnWithTypeConverterFilters(column));
+      
+          ColumnWithTypeConverterFilters<List<String>,List<String>,String> get tags => $composableBuilder(
+      column: $table.tags,
       builder: (column) => 
       ColumnWithTypeConverterFilters(column));
       
@@ -1223,6 +1237,11 @@ ColumnOrderings<String> get requiredModifiers => $composableBuilder(
       builder: (column) => 
       ColumnOrderings(column));
       
+ColumnOrderings<String> get tags => $composableBuilder(
+      column: $table.tags,
+      builder: (column) => 
+      ColumnOrderings(column));
+      
 ColumnOrderings<int> get stockQuantity => $composableBuilder(
       column: $table.stockQuantity,
       builder: (column) => 
@@ -1272,6 +1291,10 @@ GeneratedColumn<double> get price => $composableBuilder(
       column: $table.requiredModifiers,
       builder: (column) => column);
       
+          GeneratedColumnWithTypeConverter<List<String>,String> get tags => $composableBuilder(
+      column: $table.tags,
+      builder: (column) => column);
+      
 GeneratedColumn<int> get stockQuantity => $composableBuilder(
       column: $table.stockQuantity,
       builder: (column) => column);
@@ -1300,8 +1323,8 @@ GeneratedColumn<bool> get trackStock => $composableBuilder(
         createFilteringComposer: () => $$MenuItemsTableFilterComposer($db: db,$table:table),
         createOrderingComposer: () => $$MenuItemsTableOrderingComposer($db: db,$table:table),
         createComputedFieldComposer: () => $$MenuItemsTableAnnotationComposer($db: db,$table:table),
-        updateCompanionCallback: ({Value<int> id = const Value.absent(),Value<String> name = const Value.absent(),Value<String> category = const Value.absent(),Value<String> defaultStation = const Value.absent(),Value<List<String>> modifiers = const Value.absent(),Value<double> price = const Value.absent(),Value<List<String>> requiredModifiers = const Value.absent(),Value<int> stockQuantity = const Value.absent(),Value<bool> trackStock = const Value.absent(),})=> MenuItemsCompanion(id: id,name: name,category: category,defaultStation: defaultStation,modifiers: modifiers,price: price,requiredModifiers: requiredModifiers,stockQuantity: stockQuantity,trackStock: trackStock,),
-        createCompanionCallback: ({Value<int> id = const Value.absent(),required String name,required String category,required String defaultStation,required List<String> modifiers,Value<double> price = const Value.absent(),Value<List<String>> requiredModifiers = const Value.absent(),Value<int> stockQuantity = const Value.absent(),Value<bool> trackStock = const Value.absent(),})=> MenuItemsCompanion.insert(id: id,name: name,category: category,defaultStation: defaultStation,modifiers: modifiers,price: price,requiredModifiers: requiredModifiers,stockQuantity: stockQuantity,trackStock: trackStock,),
+        updateCompanionCallback: ({Value<int> id = const Value.absent(),Value<String> name = const Value.absent(),Value<String> category = const Value.absent(),Value<String> defaultStation = const Value.absent(),Value<List<String>> modifiers = const Value.absent(),Value<double> price = const Value.absent(),Value<List<String>> requiredModifiers = const Value.absent(),Value<List<String>> tags = const Value.absent(),Value<int> stockQuantity = const Value.absent(),Value<bool> trackStock = const Value.absent(),})=> MenuItemsCompanion(id: id,name: name,category: category,defaultStation: defaultStation,modifiers: modifiers,price: price,requiredModifiers: requiredModifiers,tags: tags,stockQuantity: stockQuantity,trackStock: trackStock,),
+        createCompanionCallback: ({Value<int> id = const Value.absent(),required String name,required String category,required String defaultStation,required List<String> modifiers,Value<double> price = const Value.absent(),Value<List<String>> requiredModifiers = const Value.absent(),Value<List<String>> tags = const Value.absent(),Value<int> stockQuantity = const Value.absent(),Value<bool> trackStock = const Value.absent(),})=> MenuItemsCompanion.insert(id: id,name: name,category: category,defaultStation: defaultStation,modifiers: modifiers,price: price,requiredModifiers: requiredModifiers,tags: tags,stockQuantity: stockQuantity,trackStock: trackStock,),
         withReferenceMapper: (p0) => p0
               .map(
                   (e) =>

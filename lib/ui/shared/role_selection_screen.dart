@@ -45,9 +45,9 @@ class RoleSelectionScreen extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        'SYSTEM INITIALIZATION',
+                        'Go Warriors',
                         style: TextStyle(
-                          color: Color(0xFF888888),
+                          color: Color(0xFF522323),
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.5,
@@ -84,7 +84,8 @@ class RoleSelectionScreen extends ConsumerWidget {
                       builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF111111), strokeWidth: 3)),
                     );
                     
-                    await ref.read(hostServerProvider).start();
+                    final db = ref.read(databaseProvider);
+                    await ref.read(hostServerProvider).start(db);
                     await Future.delayed(const Duration(milliseconds: 600));
                     await ref.read(discoveryServiceProvider).register(8080);
                     

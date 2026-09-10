@@ -5,8 +5,10 @@ import 'views/order_intake_view.dart';
 import 'views/library_view.dart';
 import 'views/inventory_view.dart';
 import 'views/more_view.dart';
+import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../models/connected_client.dart';
 
 class HostHome extends ConsumerStatefulWidget {
   const HostHome({super.key});
@@ -16,8 +18,6 @@ class HostHome extends ConsumerStatefulWidget {
 }
 
 class _HostHomeState extends ConsumerState<HostHome> {
-  int _currentIndex = 0;
-
   final List<Widget> _views = [
     const OrderIntakeView(),
     const InventoryView(),
@@ -25,11 +25,101 @@ class _HostHomeState extends ConsumerState<HostHome> {
     const MoreView(),
   ];
 
+  bool _initialized = false;
+  Set<String> _knownClientIds = {};
+
+  void _onClientsChanged(List<ConnectedClient> clients) {
+    final ids = clients.map((c) => c.id).toSet();
+    if (!_initialized) {
+      _initialized = true;
+      _knownClientIds = ids;
+      return;
+    }
+    final newClients = clients.where((c) => !_knownClientIds.contains(c.id)).toList();
+    _knownClientIds = ids;
+    for (final client in newClients) {
+      _showClientConnectedDialog(client);
+    }
+  }
+
+  Future<void> _showClientConnectedDialog(ConnectedClient client) async {
+    if (!mounted) return;
+    final theme = Theme.of(context);
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: theme.dividerColor),
+        ),
+        title: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'NEW CLIENT CONNECTED',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${client.deviceName} joined the kitchen display network.',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.25)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.tune_rounded, size: 16, color: Color(0xFF15803D)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'STATION: ${client.currentStation.toUpperCase()}',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2563EB))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final theme = Theme.of(context);
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
+    final currentIndex = ref.watch(hostTabIndexProvider);
+
+    ref.listen<AsyncValue<List<ConnectedClient>>>(
+      connectedClientsProvider,
+      (previous, next) {
+        if (previous == null || !next.hasValue) return;
+        _onClientsChanged(next.value ?? []);
+      },
+    );
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -43,7 +133,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
             ),
             const SizedBox(width: 12),
             Text(
-              _currentIndex == 0 ? 'TERMINAL' : (_currentIndex == 1 ? 'STOCK' : (_currentIndex == 2 ? 'LIBRARY' : 'SYSTEM')),
+              currentIndex == 0 ? 'TERMINAL' : (currentIndex == 1 ? 'STOCK' : (currentIndex == 2 ? 'LIBRARY' : 'SYSTEM')),
               style: const TextStyle(letterSpacing: 1.5, fontSize: 13),
             ),
           ],
@@ -68,14 +158,14 @@ class _HostHomeState extends ConsumerState<HostHome> {
           ),
         ],
       ),
-      body: _views[_currentIndex],
+      body: _views[currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: theme.dividerColor, width: 1.5)),
         ),
         child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          currentIndex: currentIndex,
+          onTap: (index) => ref.read(hostTabIndexProvider.notifier).state = index,
           selectedItemColor: const Color(0xFF111111),
           unselectedItemColor: const Color(0xFF999999),
           backgroundColor: theme.scaffoldBackgroundColor,

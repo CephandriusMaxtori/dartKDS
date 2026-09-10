@@ -92,6 +92,13 @@ class SettingsView extends ConsumerWidget {
           onChanged: (val) => notifier.setUse24HourFormat(val),
           activeColor: const Color(0xFF2563EB),
         ),
+        SwitchListTile(
+          title: const Text('Enable Confetti', style: TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: const Text('Show animations on order completion'),
+          value: settings.enableConfetti,
+          onChanged: (val) => notifier.setEnableConfetti(val),
+          activeColor: const Color(0xFF2563EB),
+        ),
         const Divider(),
         _buildSectionHeader('THEME'),
         ListTile(

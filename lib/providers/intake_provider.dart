@@ -24,13 +24,24 @@ class IntakeItem {
 class IntakeState {
   final List<IntakeItem> items;
   final String customerName;
+  final String? editingOrderUuid;
 
-  IntakeState({this.items = const [], this.customerName = ''});
+  IntakeState({
+    this.items = const [],
+    this.customerName = '',
+    this.editingOrderUuid,
+  });
 
-  IntakeState copyWith({List<IntakeItem>? items, String? customerName}) {
+  IntakeState copyWith({
+    List<IntakeItem>? items,
+    String? customerName,
+    String? editingOrderUuid,
+    bool clearEditing = false,
+  }) {
     return IntakeState(
       items: items ?? this.items,
       customerName: customerName ?? this.customerName,
+      editingOrderUuid: clearEditing ? null : (editingOrderUuid ?? this.editingOrderUuid),
     );
   }
 }
@@ -41,6 +52,14 @@ class IntakeNotifier extends StateNotifier<IntakeState> {
   void addItem(MenuItemData item, {List<String> selectedModifiers = const [], int quantity = 1}) {
     state = state.copyWith(
       items: [...state.items, IntakeItem(menuItem: item, selectedModifiers: selectedModifiers, quantity: quantity)],
+    );
+  }
+
+  void loadOrder(String orderUuid, String customerName, List<IntakeItem> items) {
+    state = IntakeState(
+      items: items,
+      customerName: customerName,
+      editingOrderUuid: orderUuid,
     );
   }
 

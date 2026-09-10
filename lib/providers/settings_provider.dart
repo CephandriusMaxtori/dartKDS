@@ -11,6 +11,7 @@ class AppSettings {
   final double clientTextScale;
   final double clientVolume;
   final bool clientHighContrast;
+  final bool enableConfetti;
 
   AppSettings({
     this.themeMode = ThemeMode.light,
@@ -19,6 +20,7 @@ class AppSettings {
     this.clientTextScale = 1.0,
     this.clientVolume = 1.0,
     this.clientHighContrast = false,
+    this.enableConfetti = true,
   });
 
   AppSettings copyWith({
@@ -28,6 +30,7 @@ class AppSettings {
     double? clientTextScale,
     double? clientVolume,
     bool? clientHighContrast,
+    bool? enableConfetti,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -36,6 +39,7 @@ class AppSettings {
       clientTextScale: clientTextScale ?? this.clientTextScale,
       clientVolume: clientVolume ?? this.clientVolume,
       clientHighContrast: clientHighContrast ?? this.clientHighContrast,
+      enableConfetti: enableConfetti ?? this.enableConfetti,
     );
   }
 }
@@ -54,6 +58,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final textScale = prefs.getDouble('clientTextScale') ?? 1.0;
     final volume = prefs.getDouble('clientVolume') ?? 1.0;
     final highContrast = prefs.getBool('clientHighContrast') ?? false;
+    final confetti = prefs.getBool('enableConfetti') ?? true;
 
     state = AppSettings(
       themeMode: ThemeMode.values[themeIndex],
@@ -62,6 +67,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       clientTextScale: textScale,
       clientVolume: volume,
       clientHighContrast: highContrast,
+      enableConfetti: confetti,
     );
   }
 
@@ -93,6 +99,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setClientHighContrast(bool value) async {
     state = state.copyWith(clientHighContrast: value);
     await prefs.setBool('clientHighContrast', value);
+  }
+
+  Future<void> setEnableConfetti(bool value) async {
+    state = state.copyWith(enableConfetti: value);
+    await prefs.setBool('enableConfetti', value);
   }
 }
 

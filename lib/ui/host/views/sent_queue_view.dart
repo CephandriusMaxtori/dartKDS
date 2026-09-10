@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../models/database.dart';
 import '../../../models/item_status.dart';
+import '../../../providers/app_state_providers.dart';
+import '../../../providers/intake_provider.dart';
 import '../../../providers/service_providers.dart';
 import '../../../providers/settings_provider.dart';
 
@@ -70,6 +72,21 @@ class SentQueueView extends ConsumerWidget {
                             ),
                             const SizedBox(width: 8),
                             InkWell(
+                              onTap: () => _editOrder(context, ref, db, order),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF111111).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'EDIT',
+                                  style: TextStyle(color: Color(0xFF111111), fontWeight: FontWeight.w900, fontSize: 10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
                               onTap: () => _recallOrder(context, db, server, order),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -87,8 +104,6 @@ class SentQueueView extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(order.customerName, style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
                     const Divider(height: 24),
                     // Items summary
                     StreamBuilder<List<KDSItemData>>(
@@ -137,6 +152,42 @@ class SentQueueView extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _editOrder(BuildContext context, WidgetRef ref, KDSDatabase db, KDSOrderData order) async {
+    final items = await (db.select(db.kDSItems)..where((t) => t.orderUuid.equals(order.uuid))).get();
+    final allMenuItems = await db.select(db.menuItems).get();
+
+    final List<IntakeItem> intakeItems = [];
+    for (final item in items) {
+      final menuItem = allMenuItems.firstWhere(
+        (m) => m.name == item.name,
+        orElse: () => MenuItemData(
+          id: -1,
+          name: item.name,
+          category: 'History',
+          defaultStation: item.stationTag,
+          modifiers: [],
+          price: item.price,
+          requiredModifiers: [],
+          tags: [],
+          stockQuantity: 0,
+          trackStock: false,
+        ),
+      );
+      intakeItems.add(IntakeItem(
+        menuItem: menuItem,
+        selectedModifiers: item.modifiers,
+        quantity: 1,
+      ));
+    }
+
+    ref.read(intakeProvider.notifier).loadOrder(order.uuid, order.customerName, intakeItems);
+    ref.read(hostTabIndexProvider.notifier).state = 0; // Switch to ORDER tab
+
+    if (context.mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _recallOrder(BuildContext context, KDSDatabase db, dynamic server, KDSOrderData order) async {

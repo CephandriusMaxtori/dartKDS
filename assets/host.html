@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DartKDS Web Terminal</title>
+    <style>
+        :root {
+            --bg: #F9F8F6;
+            --surface: #FFFFFF;
+            --border: #E5E2DC;
+            --text-primary: #111111;
+            --text-secondary: #666666;
+            --accent: #2563EB;
+            --danger: #DC2626;
+            --success: #22C55E;
+            --warning: #D97706;
+        }
+
+        body.dark {
+            --bg: #0D0D0D;
+            --surface: #1A1A1A;
+            --border: #2A2A2A;
+            --text-primary: #FFFFFF;
+            --text-secondary: #999999;
+        }
+
+        * { box-sizing: border-box; }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            background-color: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-primary);
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        header {
+            height: 70px;
+            background-color: var(--bg);
+            display: flex; align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border);
+            justify-content: space-between;
+            flex-shrink: 0;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--success); }
+        .header-title { font-weight: 900; letter-spacing: 1.5px; font-size: 13px; }
+        #clock { font-weight: 900; font-family: monospace; font-size: 15px; }
+
+        main {
+            flex: 1; display: block;
+            overflow: hidden; position: relative;
+        }
+
+        .tab-view { display: none; height: 100%; }
+        .tab-view.active { display: flex; flex-direction: column; }
+
+        /* ---- Bottom Navigation ---- */
+        nav {
+            height: 64px;
+            background: var(--bg);
+            border-top: 1.5px solid var(--border);
+            display: flex;
+            flex-shrink: 0;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        .nav-item {
+            flex: 1; height: 100%;
+            background: none; border: none; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 4px; color: var(--text-secondary);
+            font-weight: 800; font-size: 11px; letter-spacing: 0.5px;
+            transition: color 0.2s;
+        }
+        .nav-item.active { color: var(--text-primary); }
+        .nav-item svg { width: 22px; height: 22px; }
+
+        /* ---- ORDER TAB ---- */
+        #tab-order { flex-direction: row; }
+        #menu-section {
+            flex: 1; display: flex; flex-direction: column;
+            padding: 16px; gap: 16px; overflow-y: auto;
+        }
+        .search-box {
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px; font-weight: 600;
+            color: var(--text-primary);
+            width: 100%; outline: none;
+        }
+        #category-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+        .category-chip {
+            padding: 8px 16px; border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 11px; font-weight: 900; letter-spacing: 0.5px;
+            cursor: pointer; white-space: nowrap; transition: 0.2s;
+            color: var(--text-primary);
+        }
+        .category-chip.active { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+
+        #item-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        .item-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px;
+            cursor: pointer; display: flex; flex-direction: column;
+            height: 140px; transition: 0.2s;
+        }
+        .item-card:active { transform: scale(0.97); }
+        .item-card.out { opacity: 0.5; cursor: not-allowed; }
+        .item-name { font-weight: 900; font-size: 13px; letter-spacing: -0.2px; margin-bottom: 4px; }
+        .item-footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; }
+        .item-price { font-weight: 900; color: var(--accent); font-size: 12px; }
+        .item-stock { font-size: 10px; font-weight: 800; color: var(--text-secondary); }
+
+        #sidebar {
+            width: 380px; max-width: 45vw;
+            background: var(--surface);
+            border-left: 2px solid var(--border);
+            display: flex; flex-direction: column;
+            transition: background 0.3s ease;
+        }
+        #sidebar.hidden { display: none; }
+        .sidebar-header {
+            padding: 20px 24px 12px 24px; font-weight: 900; font-size: 14px; letter-spacing: 0.5px;
+        }
+        .order-customer {
+            margin: 0 24px 12px 24px; padding: 10px 12px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            font-weight: 700; font-size: 12px; color: var(--text-primary); outline: none;
+        }
+        #cart-items { flex: 1; overflow-y: auto; padding: 0 16px; }
+        .cart-row {
+            padding: 12px 0; border-bottom: 1px solid var(--border);
+            display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+        }
+        .cart-qty { font-weight: 900; font-size: 14px; }
+        .cart-details { flex: 1; }
+        .cart-name { font-weight: 700; font-size: 14px; }
+        .cart-mods { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .cart-price { font-weight: 800; font-size: 14px; }
+
+        .sidebar-footer { padding: 24px; border-top: 2px solid var(--border); }
+
+        #complete-btn {
+            width: 100%; height: 54px;
+            background: var(--text-primary); color: var(--bg);
+            border: none; border-radius: 8px;
+            font-weight: 900; letter-spacing: 0.5px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px;
+        }
+        #complete-btn:disabled { background: var(--border); cursor: not-allowed; color: var(--text-secondary); }
+
+        /* ---- STOCK TAB ---- */
+        .section-header {
+            padding: 24px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            flex-shrink: 0;
+        }
+        .section-header h2 { margin: 0; font-weight: 900; font-size: 18px; letter-spacing: -0.4px; }
+        .section-header p { margin: 2px 0 0 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+
+        .scroller { flex: 1; overflow-y: auto; padding: 20px; }
+
+        .stock-row {
+            background: var(--surface);
+            border-radius: 8px; border: 1px solid var(--border);
+            padding: 16px; display: flex; align-items: center; gap: 16px;
+            margin-bottom: 12px; flex-wrap: wrap;
+            transition: background 0.3s ease;
+        }
+        .stock-row.out { border-color: var(--danger); border-width: 2px; }
+        .stock-row.low { border-color: var(--warning); border-width: 2px; }
+        .stock-info { flex: 1; min-width: 200px; }
+        .stock-name { font-weight: 900; font-size: 16px; letter-spacing: -0.2px; }
+        .stock-station { font-size: 10px; color: var(--text-secondary); font-weight: 800; letter-spacing: 1px; margin-top: 2px; }
+        .stock-qty { font-size: 28px; font-weight: 900; min-width: 70px; text-align: center; }
+        .stock-qty.out { color: var(--danger); }
+
+        .qty-btn {
+            min-width: 50px; height: 44px; padding: 0 12px;
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            font-weight: 900; font-size: 11px; color: var(--text-primary); cursor: pointer;
+        }
+        .qty-btn.muted { color: var(--bg); background: var(--text-primary); border-color: var(--text-primary); }
+        .qty-btn.warn { color: var(--danger); }
+        .btn-black {
+            background: var(--text-primary); color: var(--bg);
+            border: none; border-radius: 6px;
+            padding: 12px 20px; font-weight: 900; font-size: 12px; cursor: pointer;
+        }
+        .btn-outline {
+            background: var(--surface); color: var(--text-primary);
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 12px 18px; font-weight: 900; font-size: 12px; cursor: pointer;
+        }
+
+        /* ---- MENU TAB ---- */
+        .sub-tabs {
+            display: flex; border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .sub-tab {
+            flex: 1; padding: 16px; background: none; border: none; cursor: pointer;
+            font-weight: 900; font-size: 12px; letter-spacing: 0.5px;
+            color: var(--text-secondary); border-bottom: 3px solid transparent;
+        }
+        .sub-tab.active { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+
+        .lib-pane { display: none; height: 100%; flex-direction: column; }
+        .lib-pane.active { display: flex; }
+
+        .list-row {
+            background: var(--surface);
+            border-radius: 8px; border: 1px solid var(--border);
+            padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+            margin-bottom: 8px;
+        }
+        .list-row .grow { flex: 1; }
+        .list-row .title { font-weight: 900; font-size: 13px; letter-spacing: -0.2px; }
+        .list-row .sub { font-size: 11px; color: var(--text-secondary); font-weight: 700; }
+        .list-row .price { font-weight: 900; color: var(--accent); font-size: 14px; }
+
+        .tag {
+            padding: 4px 8px; border-radius: 4px;
+            font-size: 10px; font-weight: 900; letter-spacing: 0.5px;
+        }
+        .tag.station { background: var(--border); color: var(--text-secondary); }
+        .tag.stock { background: #FFF7ED; color: #C2410C; }
+        .tag.req { background: rgba(220,38,38,0.1); color: var(--danger); margin-top: 4px; display: inline-block; }
+        .tag.global { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+
+        .icon-btn {
+            background: none; border: none; cursor: pointer; padding: 6px;
+            color: var(--text-secondary);
+        }
+        .icon-btn.danger { color: var(--danger); }
+        .icon-btn:hover { opacity: 0.7; }
+
+        /* ---- MORE TAB ---- */
+        #more-hub {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px; align-content: start;
+        }
+        .hub-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px; cursor: pointer;
+            display: flex; flex-direction: column; gap: 12px;
+            min-height: 130px; transition: transform 0.15s;
+        }
+        .hub-card:hover { transform: translateY(-2px); }
+        .hub-icon {
+            width: 38px; height: 38px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .hub-icon svg { width: 22px; height: 22px; }
+        .hub-title { font-weight: 900; font-size: 13px; letter-spacing: 0.5px; }
+        .hub-sub { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+
+        .more-view { display: none; height: 100%; flex-direction: column; }
+        .more-view.active { display: flex; }
+        .subview-top {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 24px; border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .back-btn {
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            padding: 8px 14px; font-weight: 900; font-size: 11px; cursor: pointer;
+            color: var(--text-primary);
+        }
+        .subview-title { font-weight: 900; font-size: 16px; letter-spacing: -0.3px; }
+
+        .queue-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; padding: 16px; margin-bottom: 12px;
+        }
+        .queue-head { display: flex; justify-content: space-between; align-items: center; }
+        .queue-id { font-weight: 900; font-size: 16px; }
+        .queue-time { color: var(--text-secondary); font-family: monospace; font-weight: 700; font-size: 12px; }
+        .queue-name { font-weight: 700; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .queue-item { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+        .queue-mod { color: var(--text-secondary); font-size: 11px; margin: -4px 0 6px 0; }
+        .queue-total { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 6px; font-weight: 900; }
+        .queue-total .price { color: var(--accent); font-size: 16px; }
+
+        .empty { color: var(--text-secondary); font-weight: 600; text-align: center; padding: 48px 16px; }
+
+        /* ---- Backup ---- */
+        .backup-tile {
+            display: flex; align-items: center; gap: 16px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px 20px; cursor: pointer;
+            margin-bottom: 12px;
+        }
+        .backup-tile svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .backup-tile .bt { font-weight: 900; font-size: 13px; }
+        .backup-tile .bs { font-size: 11px; color: var(--text-secondary); }
+
+        /* ---- Modals ---- */
+        .overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: none;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .overlay.show { display: flex; }
+        .modal {
+            background: var(--surface); padding: 32px; border-radius: 10px;
+            width: 460px; max-width: 92vw; max-height: 90vh; overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+        .modal-title { font-weight: 900; font-size: 20px; letter-spacing: -0.4px; margin-bottom: 12px; }
+        .modal-req { font-size: 10px; font-weight: 900; color: var(--danger); margin-bottom: 16px; }
+
+        .qty-stepper {
+            display: flex; border: 1px solid var(--border); border-radius: 8px;
+            height: 50px; align-items: center; margin-bottom: 24px;
+        }
+        .stepper-btn { flex: 1; height: 100%; border: none; background: none; cursor: pointer; font-size: 20px; color: var(--text-primary); }
+        .stepper-val { flex: 2; text-align: center; font-weight: 900; font-size: 20px; }
+
+        .mods-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+        .mod-chip {
+            padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
+            font-size: 12px; font-weight: 700; cursor: pointer; color: var(--text-primary);
+        }
+        .mod-chip.selected { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+        .mod-chip.required { border-color: var(--danger); color: var(--danger); }
+
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+        .btn-text { background: none; border: none; font-weight: 800; color: var(--text-secondary); cursor: pointer; }
+        .btn-action { background: var(--text-primary); color: var(--bg); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 900; cursor: pointer; }
+        .btn-action:disabled { background: var(--border); cursor: not-allowed; }
+
+        .field-label {
+            font-size: 10px; font-weight: 900; color: var(--text-secondary);
+            letter-spacing: 1px; margin: 14px 0 8px 0; text-transform: uppercase;
+        }
+        .modal input[type="text"], .modal input[type="number"], .modal select {
+            width: 100%; padding: 12px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            font-size: 14px; font-weight: 700; color: var(--text-primary); outline: none;
+        }
+        .switch-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 0;
+        }
+        .switch-row label { font-weight: 800; font-size: 12px; letter-spacing: 0.5px; }
+        .switch {
+            width: 44px; height: 24px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--border); position: relative; cursor: pointer; transition: 0.2s;
+        }
+        .switch.on { background: var(--text-primary); border-color: var(--text-primary); }
+        .switch::after {
+            content: ""; position: absolute; top: 2px; left: 2px;
+            width: 18px; height: 18px; border-radius: 50%; background: var(--bg);
+            transition: 0.2s;
+        }
+        .switch.on::after { left: 22px; }
+
+        .settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 0; border-bottom: 1px solid var(--border);
+        }
+        .settings-row:last-child { border-bottom: none; }
+        .settings-row .sl { font-weight: 800; font-size: 13px; }
+        .settings-row .ss { font-size: 11px; color: var(--text-secondary); }
+
+        .toast {
+            position: fixed; bottom: 84px; left: 50%; transform: translate(-50%, 20px);
+            background: #111111; color: white; font-weight: 800; font-size: 13px;
+            padding: 12px 20px; border-radius: 8px; opacity: 0; pointer-events: none;
+            transition: opacity 0.25s, transform 0.25s; z-index: 2000;
+        }
+        body.dark .toast { background: #ffffff; color: #111111; }
+        .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <div class="status-dot"></div>
+            <div class="header-title" id="header-title">TERMINAL</div>
+        </div>
+        <div id="clock">00:00:00</div>
+    </header>
+
+    <main>
+        <!-- ============ ORDER TAB ============ -->
+        <div id="tab-order" class="tab-view active">
+            <section id="menu-section">
+                <input type="text" class="search-box" id="search-input" placeholder="Search menu..." oninput="onSearchChange()">
+                <div id="category-list"></div>
+                <div id="item-grid"></div>
+            </section>
+
+            <aside id="sidebar">
+                <div class="sidebar-header">CURRENT TICKET</div>
+                <input type="text" class="order-customer" id="customer-name" placeholder="CUSTOMER NAME">
+                <div id="cart-items"></div>
+                <div class="sidebar-footer">
+                    <button id="complete-btn" disabled onclick="sendOrder()">
+                        <span>COMPLETE ORDER</span>
+                        <span id="total-price"></span>
+                    </button>
+                </div>
+            </aside>
+        </div>
+
+        <!-- ============ STOCK TAB ============ -->
+        <div id="tab-stock" class="tab-view">
+            <div class="section-header">
+                <div>
+                    <h2>STOCK MANAGEMENT</h2>
+                    <p>Sync and monitor live inventory levels.</p>
+                </div>
+                <button class="btn-black" onclick="exportShoppingList()">EXPORT LIST</button>
+            </div>
+            <div class="scroller">
+                <div id="stock-list"></div>
+            </div>
+        </div>
+
+        <!-- ============ MENU TAB ============ -->
+        <div id="tab-menu" class="tab-view">
+            <div class="sub-tabs" id="sub-tabs">
+                <button class="sub-tab active" onclick="switchLibrary(0)">ITEMS</button>
+                <button class="sub-tab" onclick="switchLibrary(1)">STATIONS</button>
+                <button class="sub-tab" onclick="switchLibrary(2)">MODIFIERS</button>
+                <button class="sub-tab" onclick="switchLibrary(3)">BACKUP</button>
+            </div>
+
+            <div id="lib-items" class="lib-pane active">
+                <div class="section-header">
+                    <div>
+                        <h2>MENU LIBRARY</h2>
+                        <p>Items, stations, and global choices.</p>
+                    </div>
+                    <button class="btn-black" onclick="openItemModal(null)">NEW ITEM</button>
+                </div>
+                <div class="scroller" id="lib-items-list"></div>
+            </div>
+
+            <div id="lib-stations" class="lib-pane">
+                <div class="section-header">
+                    <div>
+                        <h2>ROUTING STATIONS</h2>
+                        <p>Lines that tickets are routed to.</p>
+                    </div>
+                    <button class="btn-black" onclick="openStationModal()">NEW STATION</button>
+                </div>
+                <div class="scroller" id="lib-stations-list"></div>
+            </div>
+
+            <div id="lib-modifiers" class="lib-pane">
+                <div class="section-header">
+                    <div>
+                        <h2>GLOBAL MODIFIERS</h2>
+                        <p>Choices available on every item.</p>
+                    </div>
+                    <button class="btn-black" onclick="openModifierModal()">NEW MODIFIER</button>
+                </div>
+                <div class="scroller" id="lib-modifiers-list"></div>
+            </div>
+
+            <div id="lib-backup" class="lib-pane">
+                <div class="section-header">
+                    <div>
+                        <h2>SYSTEM BACKUP</h2>
+                        <p>Export or restore the full library.</p>
+                    </div>
+                </div>
+                <div class="scroller" style="max-width: 640px;">
+                    <div class="backup-tile" onclick="exportLibrary()" style="color: var(--accent);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <div>
+                            <div class="bt">EXPORT LIBRARY</div>
+                            <div class="bs">Backup menu, stations, and modifiers</div>
+                        </div>
+                    </div>
+                    <div class="backup-tile" onclick="document.getElementById('import-file').click()" style="color: var(--success);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <div>
+                            <div class="bt">IMPORT LIBRARY</div>
+                            <div class="bs">Restore from a backup file</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ MORE TAB ============ -->
+        <div id="tab-more" class="tab-view">
+            <div class="section-header" style="border: none; padding-bottom: 8px;">
+                <div>
+                    <h2>MANAGEMENT HUB</h2>
+                    <p>System configuration and reporting.</p>
+                </div>
+            </div>
+            <div id="more-hub">
+                <div class="hub-card" onclick="showMoreSection('queue')">
+                    <div class="hub-icon" style="background: rgba(37,99,235,0.08); color: #2563EB;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">SENT QUEUE</div>
+                        <div class="hub-sub">Order history</div>
+                    </div>
+                </div>
+                <div class="hub-card" onclick="showMoreSection('devices')">
+                    <div class="hub-icon" style="background: rgba(75,85,99,0.08); color: #4B5563;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">DEVICES</div>
+                        <div class="hub-sub">KDS display list</div>
+                    </div>
+                </div>
+                <div class="hub-card" onclick="switchLibrary(1)">
+                    <div class="hub-icon" style="background: rgba(217,119,6,0.08); color: #D97706;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">STATIONS</div>
+                        <div class="hub-sub">Routing lines</div>
+                    </div>
+                </div>
+                <div class="hub-card" onclick="switchLibrary(2)">
+                    <div class="hub-icon" style="background: rgba(124,58,237,0.08); color: #7C3AED;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">MODIFIERS</div>
+                        <div class="hub-sub">Global choices</div>
+                    </div>
+                </div>
+                <div class="hub-card" onclick="switchLibrary(3)">
+                    <div class="hub-icon" style="background: rgba(5,150,105,0.08); color: #059669;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">BACKUP</div>
+                        <div class="hub-sub">Data sync</div>
+                    </div>
+                </div>
+                <div class="hub-card" onclick="openSettingsModal()">
+                    <div class="hub-icon" style="background: rgba(17,17,17,0.06); color: var(--text-primary);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </div>
+                    <div>
+                        <div class="hub-title">SETTINGS</div>
+                        <div class="hub-sub">Preferences</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="more-view-queue" class="more-view">
+                <div class="subview-top">
+                    <button class="back-btn" onclick="showMoreHub()">← BACK</button>
+                    <div class="subview-title">SENT QUEUE</div>
+                </div>
+                <div class="scroller" id="queue-list"></div>
+            </div>
+
+            <div id="more-view-devices" class="more-view">
+                <div class="subview-top">
+                    <button class="back-btn" onclick="showMoreHub()">← BACK</button>
+                    <div class="subview-title">CONNECTED DEVICES</div>
+                    <div style="flex: 1;"></div>
+                    <button class="btn-outline" onclick="loadClients()">REFRESH</button>
+                </div>
+                <div class="scroller" id="devices-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <nav>
+        <button class="nav-item active" onclick="switchTab(0)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            ORDER
+        </button>
+        <button class="nav-item" onclick="switchTab(1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/><line x1="7" y1="6.5" x2="7" y2="6.5"/><line x1="7" y1="17.5" x2="7" y2="17.5"/></svg>
+            STOCK
+        </button>
+        <button class="nav-item" onclick="switchTab(2)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            MENU
+        </button>
+        <button class="nav-item" onclick="switchTab(3)">
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            MORE
+        </button>
+    </nav>
+
+    <!-- ===== Modifier Dialog (Order) ===== -->
+    <div id="mod-overlay" class="overlay">
+        <div class="modal">
+            <div id="mod-title" class="modal-title">ITEM NAME</div>
+            <div id="mod-req-msg" class="modal-req"></div>
+
+            <div class="field-label" style="margin-top:0;">Quantity</div>
+            <div class="qty-stepper">
+                <button class="stepper-btn" onclick="adjQty(-1)">-</button>
+                <div id="mod-qty" class="stepper-val">1</div>
+                <button class="stepper-btn" onclick="adjQty(1)">+</button>
+            </div>
+
+            <div class="field-label">Modifiers</div>
+            <div id="mods-list" class="mods-wrap"></div>
+
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('mod-overlay')">CANCEL</button>
+                <button id="add-btn" class="btn-action" onclick="addToCart()">ADD TO ORDER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Item Add/Edit Modal ===== -->
+    <div id="item-modal" class="overlay">
+        <div class="modal">
+            <div class="modal-title" id="item-modal-title">NEW MENU ITEM</div>
+
+            <div class="field-label" style="margin-top:0;">Item Name</div>
+            <input type="text" id="item-name" placeholder="e.g. Smash Burger">
+
+            <div class="field-label">Price</div>
+            <input type="number" id="item-price" min="0" step="0.01" placeholder="0.00">
+
+            <div class="field-label">Available Modifiers</div>
+            <input type="text" id="item-mods" placeholder="Bacon, Cheese, Egg">
+
+            <div class="field-label">Required Modifiers</div>
+            <input type="text" id="item-reqmods" placeholder="Rare, Medium, Well">
+
+            <div class="field-label">Routing Station</div>
+            <select id="item-station"></select>
+
+            <div class="switch-row">
+                <label>TRACK INVENTORY</label>
+                <div class="switch" id="item-track-switch" onclick="setTrack(this)"></div>
+            </div>
+            <div id="item-stock-wrap" style="display:none;">
+                <div class="field-label">Current Stock</div>
+                <input type="number" id="item-stock" min="0" value="0">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('item-modal')">CANCEL</button>
+                <button class="btn-action" onclick="saveItem()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Station Modal ===== -->
+    <div id="station-modal" class="overlay">
+        <div class="modal">
+            <div class="modal-title" id="station-modal-title">NEW STATION</div>
+            <div class="field-label" style="margin-top:0;">Station Name</div>
+            <input type="text" id="station-name" placeholder="e.g. Grill">
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('station-modal')">CANCEL</button>
+                <button class="btn-action" onclick="saveStation()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Modifier Modal ===== -->
+    <div id="modifier-modal" class="overlay">
+        <div class="modal">
+            <div class="modal-title">NEW GLOBAL MODIFIER</div>
+            <div class="field-label" style="margin-top:0;">Modifier Name</div>
+            <input type="text" id="modifier-name" placeholder="e.g. Extra Sauce">
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('modifier-modal')">CANCEL</button>
+                <button class="btn-action" onclick="saveModifier()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Set Stock Modal ===== -->
+    <div id="stock-modal" class="overlay">
+        <div class="modal">
+            <div class="modal-title">SET STOCK</div>
+            <div class="field-label" style="margin-top:0;">Manual Entry</div>
+            <input type="number" id="stock-input" min="0" value="0">
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('stock-modal')">CANCEL</button>
+                <button class="btn-action" onclick="saveStock()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Confirm Modal ===== -->
+    <div id="confirm-overlay" class="overlay">
+        <div class="modal">
+            <div class="modal-title" id="confirm-title">CONFIRM</div>
+            <div id="confirm-msg" style="color: var(--text-secondary); font-weight: 600; font-size: 13px;"></div>
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('confirm-overlay')">CANCEL</button>
+                <button class="btn-action" onclick="runConfirm()">CONFIRM</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Settings Modal ===== -->
+    <div id="settings-modal" class="overlay">
+        <div class="modal">
+            <div class="modal-title">WEB SETTINGS</div>
+            <div class="settings-row">
+                <div>
+                    <div class="sl">DARK THEME</div>
+                    <div class="ss">Applies to this browser only</div>
+                </div>
+                <div class="switch" id="theme-switch" onclick="setTheme(this)"></div>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="sl">24-HOUR CLOCK</div>
+                    <div class="ss">Header clock format</div>
+                </div>
+                <div class="switch" id="clock-switch" onclick="toggleClock24(this)"></div>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="sl">SERVER ADDRESS</div>
+                    <div class="ss" id="server-addr">...</div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModal('settings-modal')">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ---------- State ----------
+        let menu = [];
+        let stations = [];
+        let modifiers = [];
+        let orders = [];
+        let clients = [];
+        let cart = [];
+        let selectedCategory = 'ALL';
+        let currentSearch = '';
+        let socket;
+        let clientId = 'web-pos-' + Math.random().toString(36).substr(2, 9);
+
+        // Dialog state
+        let currentItem = null;
+        let currentQty = 1;
+        let selectedMods = [];
+
+        // Editing
+        let editingItemId = null;
+        let editingStationId = null;
+        let clickedTrack = false;
+
+        // Confirm
+        let confirmCb = null;
+
+        // Theme
+        let htmlDark = localStorage.getItem('web_dark') === '1';
+        let clock24 = localStorage.getItem('web_clock24') === '1';
+        let stockTargetId = null;
+
+        // ---------- Helpers ----------
+        function esc(s) {
+            return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
+        function csv(t) {
+            return String(t || '').split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        async function api(url, opts) {
+            const res = await fetch(url, Object.assign({
+                headers: { 'Content-Type': 'application/json' }
+            }, opts || {}));
+            if (!res.ok) {
+                let msg = res.statusText;
+                try { msg = await res.text(); } catch (e) {}
+                throw new Error(msg || 'Request failed');
+            }
+            return res.json();
+        }
+
+        function toast(msg, color) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.style.background = color || (htmlDark ? '#ffffff' : '#111111');
+            el.style.color = htmlDark ? '#111111' : '#ffffff';
+            el.classList.add('show');
+            clearTimeout(el._t);
+            el._t = setTimeout(() => el.classList.remove('show'), 2600);
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        function showConfirm(title, msg, onOk) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-msg').textContent = msg;
+            confirmCb = onOk || null;
+            openModal('confirm-overlay');
+        }
+        function runConfirm() {
+            closeModal('confirm-overlay');
+            if (confirmCb) { const cb = confirmCb; confirmCb = null; cb(); }
+        }
+
+        // ---------- Clock & Theme ----------
+        function fmtTime(d) {
+            return d.toLocaleTimeString([], clock24 ? { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        }
+        function updateClock() {
+            document.getElementById('clock').innerText = fmtTime(new Date());
+        }
+
+        function applyTheme() {
+            document.body.classList.toggle('dark', htmlDark);
+            document.getElementById('theme-switch').classList.toggle('on', htmlDark);
+        }
+        function setTheme(el) {
+            htmlDark = !htmlDark;
+            localStorage.setItem('web_dark', htmlDark ? '1' : '0');
+            el.classList.toggle('on', htmlDark);
+            applyTheme();
+            settingThemeSwitches();
+        }
+        function toggleClock24(el) {
+            clock24 = !clock24;
+            localStorage.setItem('web_clock24', clock24 ? '1' : '0');
+            el.classList.toggle('on', clock24);
+            updateClock();
+        }
+
+        function settingThemeSwitches() {
+            document.getElementById('theme-switch').classList.toggle('on', htmlDark);
+            document.getElementById('clock-switch').classList.toggle('on', clock24);
+        }
+
+        // ---------- Tabs ----------
+        const TAB_TITLES = ['TERMINAL', 'STOCK', 'LIBRARY', 'SYSTEM'];
+        function switchTab(i) {
+            document.querySelectorAll('.tab-view').forEach((v, idx) => {
+                v.classList.toggle('active', idx === i);
+            });
+            document.querySelectorAll('.nav-item').forEach((n, idx) => {
+                n.classList.toggle('active', idx === i);
+            });
+            document.getElementById('header-title').textContent = TAB_TITLES[i];
+            if (i === 1) renderStock();
+            if (i === 2) renderLibrary();
+            if (i === 3) showMoreHub();
+        }
+
+        // ---------- Order Menu ----------
+        function cleanCat(c) {
+            const up = String(c || '').trim().toUpperCase();
+            if (!up || up === 'ALL' || up === 'ALL ITEMS') return '';
+            return up;
+        }
+
+        function renderCategories() {
+            const cats = new Set();
+            menu.forEach(i => { const c = cleanCat(i.category); if (c) cats.add(c); });
+            const list = ['ALL', ...cats];
+            const el = document.getElementById('category-list');
+            el.innerHTML = list.map(c => `
+                <div class="category-chip ${selectedCategory === c ? 'active' : ''}" onclick="setCategory('${esc(c)}')">${esc(c)}</div>
+            `).join('');
+        }
+
+        function setCategory(c) {
+            selectedCategory = c;
+            renderCategories();
+            renderItems();
+        }
+
+        function onSearchChange() {
+            currentSearch = document.getElementById('search-input').value.toLowerCase();
+            renderItems();
+        }
+
+        function renderItems() {
+            const grid = document.getElementById('item-grid');
+            const filtered = menu.filter(i => {
+                const matchCat = selectedCategory === 'ALL' || (i.category || '').trim().toUpperCase() === selectedCategory;
+                const matchSearch = !currentSearch || (i.name || '').toLowerCase().includes(currentSearch);
+                return matchCat && matchSearch;
+            });
+
+            if (!filtered.length) {
+                grid.innerHTML = '<div class="empty" style="grid-column: 1 / -1;">No items found</div>';
+                return;
+            }
+
+            grid.innerHTML = filtered.map(i => {
+                const isOut = i.trackStock && i.stockQuantity <= 0;
+                return `
+                    <div class="item-card ${isOut ? 'out' : ''}" onclick="${isOut ? '' : `openModDialog(${i.id})`}">
+                        <div class="item-name">${esc((i.name || '').toUpperCase())}</div>
+                        <div class="item-footer">
+                            <div class="item-stock">${i.trackStock ? `QTY: ${i.stockQuantity}` : ''}</div>
+                            <div class="item-price">$${(i.price || 0).toFixed(2)}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ---------- Modifier Dialog ----------
+        function openModDialog(id) {
+            currentItem = menu.find(i => i.id === id);
+            currentQty = 1;
+            selectedMods = [];
+            document.getElementById('mod-title').innerText = (currentItem.name || '').toUpperCase();
+            document.getElementById('mod-qty').innerText = currentQty;
+            openModal('mod-overlay');
+            renderMods();
+        }
+
+        function renderMods() {
+            const reqs = currentItem.requiredModifiers || [];
+            const avail = currentItem.modifiers || [];
+            const globals = modifiers.map(g => g.name);
+            const all = [...new Set([...reqs, ...avail, ...globals])];
+
+            const isReqMet = reqs.length === 0 || selectedMods.some(m => reqs.includes(m));
+            document.getElementById('mod-req-msg').innerText = reqs.length > 0 ? `REQUIREMENT: SELECT ONE (${reqs.join(', ')})` : '';
+            document.getElementById('mod-req-msg').style.color = isReqMet ? 'var(--success)' : 'var(--danger)';
+            document.getElementById('add-btn').disabled = !isReqMet;
+
+            const list = document.getElementById('mods-list');
+            list.innerHTML = all.map(m => {
+                const isSelected = selectedMods.includes(m);
+                const isReq = reqs.includes(m);
+                return `<div class="mod-chip ${isSelected ? 'selected' : ''} ${isReq && !isSelected ? 'required' : ''}" data-m="${esc(m)}" onclick="toggleMod(this)">${esc(m)}</div>`;
+            }).join('');
+        }
+
+        function toggleMod(el) {
+            const m = el.getAttribute('data-m');
+            const idx = selectedMods.indexOf(m);
+            if (idx > -1) selectedMods.splice(idx, 1);
+            else selectedMods.push(m);
+            renderMods();
+        }
+
+        function adjQty(v) {
+            const next = currentQty + v;
+            if (next < 1) return;
+            if (currentItem.trackStock && next > currentItem.stockQuantity) return;
+            currentQty = next;
+            document.getElementById('mod-qty').innerText = currentQty;
+        }
+
+        function addToCart() {
+            cart.push({ item: currentItem, qty: currentQty, mods: [...selectedMods] });
+            closeModal('mod-overlay');
+            renderCart();
+        }
+
+        function renderCart() {
+            document.getElementById('sidebar').classList.toggle('hidden', cart.length === 0);
+            const list = document.getElementById('cart-items');
+            let total = 0;
+            list.innerHTML = cart.map((entry, idx) => {
+                total += entry.item.price * entry.qty;
+                return `
+                    <div class="cart-row" onclick="removeFromCart(${idx})">
+                        <div class="cart-qty">${entry.qty}×</div>
+                        <div class="cart-details">
+                            <div class="cart-name">${esc(entry.item.name)}</div>
+                            ${entry.mods.length ? `<div class="cart-mods">${esc(entry.mods.join(' • '))}</div>` : ''}
+                        </div>
+                        <div class="cart-price">$${(entry.item.price * entry.qty).toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const btn = document.getElementById('complete-btn');
+            btn.disabled = cart.length === 0;
+            document.getElementById('total-price').innerText = total > 0 ? `• $${total.toFixed(2)}` : '';
+        }
+
+        function removeFromCart(idx) {
+            cart.splice(idx, 1);
+            renderCart();
+        }
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            socket.onopen = () => {
+                socket.send(JSON.stringify({
+                    type: 'RegisterClient',
+                    id: clientId,
+                    deviceName: 'Web Terminal',
+                    station: 'HOST'
+                }));
+            };
+            socket.onclose = () => setTimeout(connect, 3000);
+        }
+
+        function sendOrder() {
+            const customerName = document.getElementById('customer-name').value.trim() || 'Guest';
+            const orderPayload = {
+                type: 'CreateOrder',
+                order: {
+                    customerName: customerName,
+                    items: cart.flatMap(entry => {
+                        const items = [];
+                        for (let i = 0; i < entry.qty; i++) {
+                            items.push({
+                                name: entry.item.name,
+                                modifiers: entry.mods,
+                                stationTag: entry.item.defaultStation,
+                                price: entry.item.price
+                            });
+                        }
+                        return items;
+                    })
+                }
+            };
+
+            socket.send(JSON.stringify(orderPayload));
+            cart = [];
+            renderCart();
+            toast('Order Sent!');
+        }
+
+        // ---------- Stock ----------
+        function renderStock() {
+            const tracked = menu.filter(i => i.trackStock);
+            const el = document.getElementById('stock-list');
+            if (!tracked.length) {
+                el.innerHTML = '<div class="empty">No tracked items found</div>';
+                return;
+            }
+            el.innerHTML = tracked.map(i => {
+                const isOut = i.stockQuantity <= 0;
+                const isLow = !isOut && i.stockQuantity <= 5;
+                return `
+                    <div class="stock-row ${isOut ? 'out' : (isLow ? 'low' : '')}">
+                        <div class="stock-info">
+                            <div class="stock-name">${esc(i.name.toUpperCase())}</div>
+                            <div class="stock-station">${esc((i.defaultStation || '').toUpperCase())}</div>
+                        </div>
+                        <button class="qty-btn" onclick="adjustStock(${i.id}, -1)">-1</button>
+                        <button class="qty-btn" onclick="adjustStock(${i.id}, 1)">+1</button>
+                        <div class="stock-qty ${isOut ? 'out' : ''}">${i.stockQuantity}</div>
+                        <button class="qty-btn warn" onclick="adjustStock(${i.id}, -${i.stockQuantity})">ZERO</button>
+                        <button class="qty-btn muted" onclick="openStockModal(${i.id})">SET</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function adjustStock(id, delta) {
+            const it = menu.find(i => i.id === id);
+            if (!it) return;
+            const target = Math.max(0, it.stockQuantity + delta);
+            await setStockQty(id, target);
+        }
+
+        function openStockModal(id) {
+            stockTargetId = id;
+            const it = menu.find(i => i.id === id);
+            document.getElementById('stock-input').value = it ? it.stockQuantity : 0;
+            openModal('stock-modal');
+        }
+
+        async function saveStock() {
+            const val = Math.max(0, parseInt(document.getElementById('stock-input').value, 10) || 0);
+            if (stockTargetId != null) await setStockQty(stockTargetId, val);
+            closeModal('stock-modal');
+        }
+
+        async function setStockQty(id, qty) {
+            try {
+                const r = await api(`/api/menu/${id}/stock`, { method: 'POST', body: JSON.stringify({ quantity: qty }) });
+                const it = menu.find(i => i.id === id);
+                if (it) it.stockQuantity = r.stockQuantity;
+                renderStock();
+                renderItems();
+                renderLibraryItems();
+            } catch (e) {
+                toast('Error: ' + e.message, '#DC2626');
+            }
+        }
+
+        function exportShoppingList() {
+            const low = menu.filter(i => i.trackStock && i.stockQuantity <= 5);
+            if (!low.length) { toast('All items are in stock.', '#22C55E'); return; }
+            const lines = low.map(i => `[ ] ${i.name.toUpperCase()} (${i.stockQuantity <= 0 ? 'OUT' : i.stockQuantity})`);
+            const blob = new Blob(['SHOPPING LIST - ' + new Date().toLocaleString() + '\n' + lines.join('\n')], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'shopping_list.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        // ---------- Library ----------
+        function switchLibrary(i) {
+            const names = ['items', 'stations', 'modifiers', 'backup'];
+            document.querySelectorAll('.sub-tab').forEach((t, idx) => t.classList.toggle('active', idx === i));
+            document.querySelectorAll('.lib-pane').forEach((p, idx) => p.classList.toggle('active', idx === i));
+            if (i === 0) renderLibraryItems();
+            if (i === 1) renderStations();
+            if (i === 2) renderModifiers();
+            renderCategories();
+            renderItems();
+        }
+
+        function renderLibrary() { renderLibraryItems(); }
+
+        function renderLibraryItems() {
+            const el = document.getElementById('lib-items-list');
+            if (!menu.length) {
+                el.innerHTML = '<div class="empty">No items yet. Add one with NEW ITEM.</div>';
+                return;
+            }
+            el.innerHTML = menu.map(i => `
+                <div class="list-row">
+                    <div class="grow">
+                        <div class="title">${esc(i.name.toUpperCase())}</div>
+                        <div style="margin-top:6px;">
+                            <span class="tag station">${esc((i.defaultStation || '').toUpperCase())}</span>
+                            ${i.trackStock ? `<span class="tag stock" style="margin-left:6px;">STOCK: ${i.stockQuantity}</span>` : ''}
+                        </div>
+                        ${(i.requiredModifiers || []).length ? `<div><span class="tag req">REQUIRED: ${esc((i.requiredModifiers || []).join(', '))}</span></div>` : ''}
+                    </div>
+                    <div class="price">$${(i.price || 0).toFixed(2)}</div>
+                    <button class="icon-btn" onclick="openItemModal(${i.id})" title="Edit">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="icon-btn danger" onclick="deleteItem(${i.id})" title="Delete">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function openItemModal(id) {
+            const item = id != null ? menu.find(i => i.id === id) : null;
+            editingItemId = item ? item.id : null;
+            clickedTrack = item ? !!item.trackStock : false;
+
+            document.getElementById('item-modal-title').innerText = item ? 'EDIT MENU ITEM' : 'NEW MENU ITEM';
+            document.getElementById('item-name').value = item ? item.name : '';
+            document.getElementById('item-price').value = item ? item.price : '';
+            document.getElementById('item-mods').value = item ? (item.modifiers || []).join(', ') : '';
+            document.getElementById('item-reqmods').value = item ? (item.requiredModifiers || []).join(', ') : '';
+
+            const sel = document.getElementById('item-station');
+            sel.innerHTML = '<option value="">Main Station</option>' + stations.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+            const currentStation = item ? item.defaultStation : (stations.length ? stations[0].name : 'Main Station');
+            if (!stations.some(s => s.name === currentStation) && item) {
+                sel.innerHTML = sel.innerHTML + `<option value="${esc(currentStation)}" selected>${esc(currentStation)}</option>`;
+            }
+            sel.value = currentStation;
+
+            document.getElementById('item-stock').value = item ? item.stockQuantity : 0;
+            setTrack(document.getElementById('item-track-switch'), item ? !!item.trackStock : false, true);
+            openModal('item-modal');
+        }
+
+        function setTrack(el, forceVal, skip) {
+            if (skip) {
+                el.classList.toggle('on', !!forceVal);
+                clickedTrack = !!forceVal;
+            } else {
+                clickedTrack = !clickedTrack;
+                el.classList.toggle('on', clickedTrack);
+            }
+            document.getElementById('item-stock-wrap').style.display = clickedTrack ? 'block' : 'none';
+        }
+
+        async function saveItem() {
+            const name = document.getElementById('item-name').value.trim();
+            if (!name) { toast('Item name required', '#DC2626'); return; }
+            const payload = {
+                name: name,
+                price: parseFloat(document.getElementById('item-price').value) || 0,
+                modifiers: csv(document.getElementById('item-mods').value),
+                requiredModifiers: csv(document.getElementById('item-reqmods').value),
+                defaultStation: document.getElementById('item-station').value || 'Main Station',
+                trackStock: clickedTrack,
+                stockQuantity: parseInt(document.getElementById('item-stock').value, 10) || 0
+            };
+            try {
+                if (editingItemId == null) {
+                    const r = await api('/api/menu', { method: 'POST', body: JSON.stringify(payload) });
+                    payload.id = r.id;
+                    menu.push(payload);
+                } else {
+                    await api(`/api/menu/${editingItemId}`, { method: 'PUT', body: JSON.stringify(payload) });
+                    const idx = menu.findIndex(i => i.id === editingItemId);
+                    if (idx !== -1) menu[idx] = Object.assign({}, menu[idx], payload);
+                }
+                closeModal('item-modal');
+                toast(editingItemId == null ? 'Item added' : 'Item updated', '#22C55E');
+                renderCategories();
+                renderItems();
+                renderLibraryItems();
+                renderStock();
+            } catch (e) {
+                toast('Error: ' + e.message, '#DC2626');
+            }
+        }
+
+        function deleteItem(id) {
+            showConfirm('DELETE ITEM', 'Remove this item from the menu?', async () => {
+                try {
+                    await api(`/api/menu/${id}`, { method: 'DELETE' });
+                    menu = menu.filter(i => i.id !== id);
+                    renderCategories();
+                    renderItems();
+                    renderLibraryItems();
+                    renderStock();
+                    toast('Item deleted', '#22C55E');
+                } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+            });
+        }
+
+        function openStationModal() {
+            editingStationId = null;
+            document.getElementById('station-modal-title').innerText = 'NEW STATION';
+            document.getElementById('station-name').value = '';
+            openModal('station-modal');
+        }
+
+        function editStation(id) {
+            const s = stations.find(x => x.id === id);
+            if (!s) return;
+            editingStationId = id;
+            document.getElementById('station-modal-title').innerText = 'EDIT STATION';
+            document.getElementById('station-name').value = s.name;
+            openModal('station-modal');
+        }
+
+        async function saveStation() {
+            const name = document.getElementById('station-name').value.trim();
+            if (!name) { toast('Station name required', '#DC2626'); return; }
+            try {
+                if (editingStationId == null) {
+                    const r = await api('/api/stations', { method: 'POST', body: JSON.stringify({ name: name }) });
+                    stations.push({ id: r.id, name: name });
+                } else {
+                    await api(`/api/stations/${editingStationId}`, { method: 'PUT', body: JSON.stringify({ name: name }) });
+                    const s = stations.find(x => x.id === editingStationId);
+                    if (s) s.name = name;
+                }
+                closeModal('station-modal');
+                renderStations();
+                renderCategories();
+                renderItems();
+                toast(name + ' saved', '#22C55E');
+            } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+        }
+
+        function deleteStation(id) {
+            showConfirm('DELETE STATION', 'Remove this routing line?', async () => {
+                try {
+                    await api(`/api/stations/${id}`, { method: 'DELETE' });
+                    stations = stations.filter(s => s.id !== id);
+                    renderStations();
+                    toast('Station deleted', '#22C55E');
+                } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+            });
+        }
+
+        function renderStations() {
+            const el = document.getElementById('lib-stations-list');
+            if (!stations.length) {
+                el.innerHTML = '<div class="empty">No stations yet. Add one with NEW STATION.</div>';
+                return;
+            }
+            el.innerHTML = stations.map(s => `
+                <div class="list-row">
+                    <div class="grow">
+                        <div class="title">${esc(s.name.toUpperCase())}</div>
+                    </div>
+                    <button class="icon-btn" onclick="editStation(${s.id})" title="Rename">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="icon-btn danger" onclick="deleteStation(${s.id})" title="Delete">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function openModifierModal() {
+            document.getElementById('modifier-name').value = '';
+            openModal('modifier-modal');
+        }
+
+        async function saveModifier() {
+            const name = document.getElementById('modifier-name').value.trim();
+            if (!name) { toast('Modifier name required', '#DC2626'); return; }
+            try {
+                const r = await api('/api/modifiers', { method: 'POST', body: JSON.stringify({ name: name }) });
+                modifiers.push({ id: r.id, name: name });
+                closeModal('modifier-modal');
+                renderModifiers();
+                toast(name + ' saved', '#22C55E');
+            } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+        }
+
+        function deleteModifier(id) {
+            showConfirm('DELETE MODIFIER', 'Remove this global modifier?', async () => {
+                try {
+                    await api(`/api/modifiers/${id}`, { method: 'DELETE' });
+                    modifiers = modifiers.filter(m => m.id !== id);
+                    renderModifiers();
+                    toast('Modifier deleted', '#22C55E');
+                } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+            });
+        }
+
+        function renderModifiers() {
+            const el = document.getElementById('lib-modifiers-list');
+            if (!modifiers.length) {
+                el.innerHTML = '<div class="empty">No global modifiers yet.</div>';
+                return;
+            }
+            el.innerHTML = modifiers.map(m => `
+                <div class="list-row">
+                    <div class="grow">
+                        <div class="title">${esc(m.name.toUpperCase())}</div>
+                    </div>
+                    <button class="icon-btn danger" onclick="deleteModifier(${m.id})" title="Delete">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // ---------- Backup ----------
+        async function exportLibrary() {
+            try {
+                const res = await fetch('/api/library/export');
+                const text = await res.text();
+                const blob = new Blob([text], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'dartkds_backup.json';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                toast('Library exported', '#22C55E');
+            } catch (e) { toast('Error: ' + e.message, '#DC2626'); }
+        }
+
+        document.getElementById('import-file').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const data = JSON.parse(await file.text());
+                await api('/api/library/import', { method: 'POST', body: JSON.stringify(data) });
+                toast('Library imported', '#22C55E');
+                await refreshMenu();
+            } catch (err) {
+                toast('Import failed: ' + err.message, '#DC2626');
+            }
+            e.target.value = '';
+        });
+
+        // ---------- More Hub ----------
+        function showMoreHub() {
+            document.querySelectorAll('.more-view').forEach(v => v.classList.remove('active'));
+            document.getElementById('more-hub').style.display = 'grid';
+        }
+
+        function showMoreSection(name) {
+            document.getElementById('more-hub').style.display = 'none';
+            document.querySelectorAll('.more-view').forEach(v => v.classList.remove('active'));
+            document.getElementById('more-view-' + name).classList.add('active');
+            if (name === 'queue') loadOrders();
+            if (name === 'devices') loadClients();
+        }
+
+        async function loadOrders() {
+            const el = document.getElementById('queue-list');
+            try {
+                orders = await api('/api/orders');
+                if (!orders.length) {
+                    el.innerHTML = '<div class="empty">No Orders Sent Yet</div>';
+                    return;
+                }
+                el.innerHTML = orders.map(o => {
+                    const total = (o.items || []).reduce((s, it) => s + (it.price || 0), 0);
+                    return `
+                        <div class="queue-card">
+                            <div class="queue-head">
+                                <div class="queue-id">#${esc(o.uuid.substring(0, 4).toUpperCase())}</div>
+                                <div class="queue-time">${new Date(o.timestamp).toLocaleString()}</div>
+                            </div>
+                            <div class="queue-name">${esc(o.customerName)}</div>
+                            <div style="margin-top: 10px;">
+                                ${(o.items || []).map(it => `
+                                    <div class="queue-item"><span>${esc(it.name)}</span><span>$${(it.price || 0).toFixed(2)}</span></div>
+                                    ${(it.modifiers || []).length ? `<div class="queue-mod">${esc(it.modifiers.join(', '))}</div>` : ''}
+                                `).join('')}
+                            </div>
+                            <div class="queue-total"><span>TOTAL</span><span class="price">$${total.toFixed(2)}</span></div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                el.innerHTML = '<div class="empty">Failed to load orders</div>';
+            }
+        }
+
+        async function loadClients() {
+            const el = document.getElementById('devices-list');
+            try {
+                clients = await api('/api/clients');
+                renderClients();
+            } catch (e) {
+                el.innerHTML = '<div class="empty">Failed to load devices</div>';
+            }
+        }
+
+        function renderClients() {
+            const el = document.getElementById('devices-list');
+            if (!clients.length) {
+                el.innerHTML = '<div class="empty">No clients connected</div>';
+                return;
+            }
+            el.innerHTML = clients.map(c => `
+                <div class="list-row">
+                    <div class="grow">
+                        <div class="title">${esc(c.deviceName)}</div>
+                        <div class="sub">${esc(c.currentStation)} • ${new Date(c.connectedAt).toLocaleTimeString()}</div>
+                    </div>
+                    <span class="tag station">${esc((c.currentStation || '').toUpperCase())}</span>
+                </div>
+            `).join('');
+        }
+
+        // ---------- Settings ----------
+        function openSettingsModal() {
+            document.getElementById('server-addr').textContent = window.location.host;
+            settingThemeSwitches();
+            openModal('settings-modal');
+        }
+
+        // ---------- Refresh ----------
+        async function refreshMenu() {
+            try {
+                const [m, s, mod] = await Promise.all([api('/api/menu'), api('/api/stations'), api('/api/modifiers')]);
+                menu = m || [];
+                stations = s || [];
+                modifiers = mod || [];
+                renderCategories();
+                renderItems();
+                renderStock();
+                renderLibraryItems();
+                renderStations();
+                renderModifiers();
+            } catch (e) {
+                toast('Failed to load menu: ' + e.message, '#DC2626');
+            }
+        }
+
+        // ---------- Init ----------
+        async function init() {
+            applyTheme();
+            updateClock();
+            setInterval(updateClock, 1000);
+            renderCart();
+            await refreshMenu();
+            connect();
+        }
+
+        init();
+    </script>
+</body>
+</html>

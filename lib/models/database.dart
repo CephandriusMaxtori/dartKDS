@@ -30,6 +30,7 @@ class MenuItems extends Table {
   TextColumn get modifiers => text().map(const ListStringConverter())();
   RealColumn get price => real().withDefault(const Constant(0.0))();
   TextColumn get requiredModifiers => text().map(const NullableListStringConverter()).nullable()();
+  TextColumn get tags => text().map(const NullableListStringConverter()).nullable()();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))();
   BoolColumn get trackStock => boolean().withDefault(const Constant(false))();
 }
@@ -87,7 +88,7 @@ class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 7; // Incremented to 7
+  int get schemaVersion => 8; // Incremented to 8
 
   @override
   MigrationStrategy get migration {
@@ -132,6 +133,14 @@ class KDSDatabase extends _$KDSDatabase {
         if (from < 7) {
           await m.addColumn(menuItems, menuItems.stockQuantity);
           await m.addColumn(menuItems, menuItems.trackStock);
+        }
+        if (from < 8) {
+          // Version 8 added tags. If it already exists, ignore error.
+          try {
+            await m.addColumn(menuItems, menuItems.tags);
+          } catch (e) {
+            // Likely already exists
+          }
         }
       },
     );

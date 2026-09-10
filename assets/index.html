@@ -91,8 +91,11 @@
             display: flex; flex-direction: column;
             max-height: 100%;
             transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, margin 0.4s ease, border-color 0.3s ease;
-            animation: slideIn 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
             transform-origin: top center;
+        }
+
+        .ticket-card.animate-in {
+            animation: slideIn 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
         }
 
         .ticket-card.removing {
@@ -270,6 +273,11 @@
                 <input type="text" id="current-station-input" onchange="updateStation(this.value)">
             </div>
 
+            <div class="setting-group" style="display: flex; justify-content: space-between; align-items: center;">
+                <label class="setting-label" style="margin-bottom: 0;">Enable Confetti</label>
+                <input type="checkbox" id="confetti-toggle" style="width: auto;" onchange="updateConfetti(this.checked)">
+            </div>
+
             <button class="btn-primary" onclick="closeSettings()">CLOSE</button>
             <button class="btn-ghost" onclick="location.reload()">RELOAD APP</button>
         </div>
@@ -301,6 +309,7 @@
         let currentScale = localStorage.getItem('kds_scale') || '1.0';
         let currentTheme = localStorage.getItem('kds_theme') || 'dark';
         let currentVolume = localStorage.getItem('kds_volume') || '1.0';
+        let enableConfetti = localStorage.getItem('kds_confetti') !== 'false';
         let clientId = localStorage.getItem('kds_client_id') || 'web-' + Math.random().toString(36).substr(2, 9);
 
         localStorage.setItem('kds_client_id', clientId);
@@ -314,6 +323,7 @@
             document.getElementById('scale-slider').value = currentScale;
             document.getElementById('volume-slider').value = currentVolume;
             document.getElementById('theme-select').value = currentTheme;
+            document.getElementById('confetti-toggle').checked = enableConfetti;
         }
 
         function playNotification() {
@@ -380,7 +390,13 @@
             renderQueue();
         }
 
+        function updateConfetti(val) {
+            enableConfetti = val;
+            localStorage.setItem('kds_confetti', val);
+        }
+
         function triggerConfetti() {
+            if (!enableConfetti) return;
             const colors = ['#22C55E', '#2563EB', '#FACC15', '#DC2626', '#FF00FF'];
             for (let i = 0; i < 120; i++) {
                 const particle = document.createElement('div');
@@ -419,9 +435,28 @@
             };
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === 'OrderCreated') {
+                if (data.type === 'OrderCreated' || data.type === 'OrderUpdated') {
                     playNotification();
-                    orders.push(data.order);
+                    const newOrder = data.order;
+
+                    const index = orders.findIndex(o => o.uuid === newOrder.uuid);
+                    if (index !== -1) {
+                        // REPLACE: prevents duplicate cards on recall
+                        orders[index] = newOrder;
+                    } else {
+                        // ADD NEW
+                        orders.push(newOrder);
+                    }
+                    renderQueue();
+                } else if (data.type === 'ItemBumped') {
+                    const order = orders.find(o => o.uuid === data.orderUuid);
+                    if (order) {
+                        const item = order.items.find(i => i.uuid === data.itemUuid);
+                        if (item) { item.isBumped = data.isBumped === true; }
+                    }
+                    renderQueue();
+                } else if (data.type === 'TicketFinished') {
+                    orders = orders.filter(o => o.uuid !== data.orderUuid);
                     renderQueue();
                 } else if (data.type === 'SetStation') {
                     currentStation = data.station.toUpperCase();
@@ -440,9 +475,17 @@
             if (order) {
                 const item = order.items.find(i => i.uuid === itemUuid);
                 if (item) {
-                    item.isBumped = !item.isBumped;
+                    const newValue = !item.isBumped;
+                    item.isBumped = newValue;
+                    sendBump(orderUuid, itemUuid, newValue);
                     renderQueue();
                 }
+            }
+        }
+
+        function sendBump(orderUuid, itemUuid, isBumped) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'ItemBumped', orderUuid, itemUuid, isBumped }));
             }
         }
 
@@ -455,6 +498,9 @@
             });
             const allBumped = displayItems.every(i => i.isBumped);
             if (allBumped) {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'TicketFinished', orderUuid }));
+                }
                 const card = document.querySelector(`[data-uuid="${orderUuid}"]`);
                 if (card) {
                     card.classList.add('removing');
@@ -469,6 +515,7 @@
                 }
             } else {
                 displayItems.forEach(i => i.isBumped = true);
+                displayItems.forEach(i => sendBump(orderUuid, i.uuid, true));
                 renderQueue();
             }
         }
@@ -488,20 +535,46 @@
                 return;
             }
 
-            queueEl.innerHTML = '';
+            // Stable render: Update existing elements instead of wiping everything
+            // This prevents all cards from re-running their "slide-in" animation
+            const emptyState = queueEl.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            const currentUuids = ordersWithFilteredItems.map(o => o.uuid);
+
+            // 1. Remove orphaned cards (orders that are gone)
+            Array.from(queueEl.children).forEach(child => {
+                const uuid = child.getAttribute('data-uuid');
+                if (uuid && !currentUuids.includes(uuid) && !child.classList.contains('removing')) {
+                    child.remove();
+                }
+            });
+
+            // 2. Add or Update cards
             ordersWithFilteredItems.forEach(order => {
                 const minutes = Math.floor((new Date() - new Date(order.timestamp))/60000);
                 let agingClass = 'fresh';
-                if (minutes >= 10) {
-                    agingClass = 'overdue';
-                } else if (minutes >= 5) {
-                    agingClass = 'warning';
-                }
+                if (minutes >= 10) agingClass = 'overdue';
+                else if (minutes >= 5) agingClass = 'warning';
 
                 const allBumped = order.displayItems.every(i => i.isBumped);
-                const card = document.createElement('div');
-                card.className = `ticket-card ${agingClass}`;
-                card.setAttribute('data-uuid', order.uuid);
+                let card = queueEl.querySelector(`[data-uuid="${order.uuid}"]`);
+                const isNew = !card;
+
+                if (isNew) {
+                    card = document.createElement('div');
+                    card.setAttribute('data-uuid', order.uuid);
+                    card.classList.add('ticket-card', 'animate-in');
+                    queueEl.appendChild(card);
+                    // Remove the animation class after it finishes so it doesn't re-trigger on updates
+                    setTimeout(() => card.classList.remove('animate-in'), 600);
+                }
+
+                // Update card state without destroying the element
+                if (!card.classList.contains('removing')) {
+                    card.className = `ticket-card ${agingClass}`;
+                }
+
                 const itemsHtml = order.displayItems.map(item => `
                     <div class="item-row ${item.isBumped ? 'bumped' : ''}" onclick="toggleItem('${order.uuid}', '${item.uuid}')">
                         <div class="item-name">
@@ -525,14 +598,12 @@
                                 ${Math.max(0, minutes)}m
                             </span>
                         </div>
-                        <p style="color: var(--text-secondary); font-weight: 900; margin: 4px 0 0 0; font-size: 14px;">${order.customerName.toUpperCase()}</p>
                     </div>
                     <div class="ticket-items">${itemsHtml}</div>
                     <div class="ticket-footer ${allBumped ? 'ready' : ''}" onclick="finishTicket('${order.uuid}')">
                         ${allBumped ? 'FINISH TICKET' : 'BUMP ALL'}
                     </div>
                 `;
-                queueEl.appendChild(card);
             });
         }
         applySettings();

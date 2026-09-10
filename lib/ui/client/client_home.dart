@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nsd/nsd.dart' as nsd;
 import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:confetti/confetti.dart';
@@ -25,6 +24,7 @@ class ClientHome extends ConsumerStatefulWidget {
 class _ClientHomeState extends ConsumerState<ClientHome> {
   bool _isConnected = false;
   StreamSubscription? _wsSubscription;
+  StreamSubscription? _discoverySub;
   String _deviceIp = '...';
   final _audioPlayer = AudioPlayer();
   late ConfettiController _confettiController;
@@ -61,6 +61,9 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       _playSound();
       HapticFeedback.vibrate();
     }
+    if (data['type'] == 'SetStation') {
+      ref.read(stationTagProvider.notifier).set((data['station'] as String).toUpperCase());
+    }
     ref.read(clientStateProvider.notifier).handleEvent(message);
   }
 
@@ -90,10 +93,10 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   }
 
   void _startDiscovery() {
-    ref.read(discoveryServiceProvider).discover().listen((service) {
-      if (service.addresses != null && service.addresses!.isNotEmpty && !_isConnected) {
-        final host = service.addresses!.first.address;
-        _connectToHost(host, service.port ?? 8080);
+    _discoverySub?.cancel();
+    _discoverySub = ref.read(discoveryServiceProvider).discover().listen((host) {
+      if (!_isConnected && host.address.isNotEmpty) {
+        _connectToHost(host.address, host.port);
       }
     }, onError: (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,7 +105,11 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     });
   }
 
-  void _connectToHost(String host, int port) async {
+  void _connectToHost(String host, int port, {bool manual = false}) async {
+    final hostTrim = host.trim();
+    if (hostTrim.isEmpty) return;
+    _discoverySub?.cancel();
+
     final prefs = await SharedPreferences.getInstance();
     String? clientId = prefs.getString('client_uuid');
     if (clientId == null) {
@@ -110,24 +117,43 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       await prefs.setString('client_uuid', clientId);
     }
 
-    ref.read(clientServiceProvider).connect(host, port);
-    
+    try {
+      await ref.read(clientServiceProvider).connect(hostTrim, port);
+    } catch (e) {
+      debugPrint('Host connection error: $e');
+      if (!manual) _startDiscovery();
+      if (mounted) setState(() => _isConnected = false);
+      return;
+    }
+
     final registration = jsonEncode({
       'type': 'RegisterClient',
       'id': clientId,
       'deviceName': Platform.localHostname,
       'station': ref.read(stationTagProvider) ?? 'GENERAL',
     });
-    
+
     ref.read(clientServiceProvider).send(registration);
 
     _wsSubscription?.cancel();
-    _wsSubscription = ref.read(clientServiceProvider).stream.listen((message) {
-      _handleIncomingMessage(message.toString());
-    });
-    setState(() {
-      _isConnected = true;
-    });
+    _wsSubscription = ref.read(clientServiceProvider).stream.listen(
+      (message) {
+        _handleIncomingMessage(message.toString());
+      },
+      onError: (e) {
+        debugPrint('Host connection error: $e');
+        if (mounted) {
+          setState(() {
+            _isConnected = false;
+          });
+        }
+      },
+    );
+    if (mounted) {
+      setState(() {
+        _isConnected = true;
+      });
+    }
   }
 
   @override
@@ -169,6 +195,14 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 onPressed: () => _showManualConnectDialog(),
                 child: const Text('MANUAL CONNECT', style: TextStyle(color: Color(0xFF6B7280))),
               ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  _discoverySub?.cancel();
+                  ref.read(deviceRoleProvider.notifier).state = DeviceRole.unset;
+                },
+                child: const Text('CANCEL', style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w800)),
+              ),
             ],
           ),
         ),
@@ -209,16 +243,20 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                               curve: Curves.easeOutBack,
                               tween: Tween(begin: 0.0, end: 1.0),
                               builder: (context, value, child) {
-                                return Transform.translate(
-                                  offset: Offset(50 * (1 - value), 0),
-                                  child: Opacity(opacity: value, child: child),
-                                );
+return Transform.translate(
+                                    offset: Offset(50 * (1 - value), 0),
+                                    child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+                                  );
                               },
                               child: _TicketCard(
                                 key: ValueKey(ticket.uuid),
                                 order: ticket,
                                 stationFilter: stationTag,
-                                onFinished: () => _confettiController.play(),
+                                onFinished: () {
+                                  if (settings.enableConfetti) {
+                                    _confettiController.play();
+                                  }
+                                },
                                 settings: settings,
                               ),
                             );
@@ -265,18 +303,29 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 
   Widget _buildHeader(String station, String timeFormat, AppSettings settings) {
     final isDark = settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
-    final bgColor = settings.clientHighContrast 
-        ? Colors.black 
-        : (settings.themeMode == ThemeMode.light ? Colors.grey.shade200 : const Color(0xFF1F2937));
     final textColor = isDark ? Colors.white : Colors.black87;
+
+    final bool highContrast = settings.clientHighContrast;
+    final bool light = settings.themeMode == ThemeMode.light;
+    final BoxDecoration decoration;
+    if (highContrast) {
+      decoration = const BoxDecoration(
+        color: Colors.black,
+        border: Border(bottom: BorderSide(color: Colors.white, width: 2)),
+      );
+    } else if (light) {
+      decoration = BoxDecoration(
+        color: Colors.grey.shade200,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      );
+    } else {
+      decoration = const BoxDecoration(color: Color(0xFF1F2937));
+    }
 
     return Container(
       height: 60,
-      color: bgColor,
+      decoration: decoration,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: settings.clientHighContrast 
-        ? const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white, width: 2))) 
-        : (settings.themeMode == ThemeMode.light ? BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade300))) : null),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -386,6 +435,30 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 activeColor: const Color(0xFF22C55E),
                 onChanged: (val) => notifier.setClientHighContrast(val),
               ),
+              SwitchListTile(
+                title: Text('ENABLE CONFETTI', 
+                  style: TextStyle(
+                    color: settings.themeMode == ThemeMode.light && !settings.clientHighContrast ? Colors.black : Colors.white, 
+                    fontWeight: FontWeight.bold
+                  )),
+                value: settings.enableConfetti,
+                activeColor: const Color(0xFF22C55E),
+                onChanged: (val) => notifier.setEnableConfetti(val),
+              ),
+              ListTile(
+                title: const Text('CURRENT STATION', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                subtitle: Text(
+                  (ref.watch(stationTagProvider) ?? 'GENERAL').toUpperCase(),
+                  style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF22C55E), letterSpacing: 0.5),
+                ),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showStationSelectionDialog();
+                  },
+                  child: const Text('CHANGE', style: TextStyle(color: Color(0xFF22C55E), fontWeight: FontWeight.w900)),
+                ),
+              ),
               const Divider(),
               ListTile(
                 title: const Text('EXIT KITCHEN MODE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
@@ -446,7 +519,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
           TextButton(
             onPressed: () {
-              ref.read(stationTagProvider.notifier).state = controller.text.trim().toUpperCase();
+              ref.read(stationTagProvider.notifier).set(controller.text);
               Navigator.pop(context);
             },
             child: const Text('SAVE', style: TextStyle(color: Color(0xFF22C55E))),
@@ -458,25 +531,41 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
 
   void _showManualConnectDialog() {
     final controller = TextEditingController();
+    final portController = TextEditingController(text: '8080');
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F2937),
         title: const Text('MANUAL CONNECT', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'HOST IP ADDRESS',
-            hintStyle: TextStyle(color: Colors.grey),
-          ),
-          keyboardType: TextInputType.number,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'HOST IP ADDRESS',
+                hintStyle: TextStyle(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: portController,
+              style: const TextStyle(color: Colors.white),
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: 'PORT (default 8080)',
+                hintStyle: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
           TextButton(
             onPressed: () {
-              _connectToHost(controller.text, 8080);
+              final port = int.tryParse(portController.text) ?? 8080;
+              _connectToHost(controller.text, port, manual: true);
               Navigator.pop(context);
             },
             child: const Text('CONNECT', style: TextStyle(color: Color(0xFF22C55E))),
@@ -568,10 +657,6 @@ class _TicketCard extends ConsumerWidget {
                     ),
                   ],
                 ),
-                Text(
-                  order.customerName.toUpperCase(),
-                  style: TextStyle(color: isDark ? const Color(0xFF6B7280) : Colors.grey.shade700, fontWeight: FontWeight.bold),
-                ),
               ],
             ),
           ),
@@ -584,6 +669,13 @@ class _TicketCard extends ConsumerWidget {
                 return InkWell(
                   onTap: () {
                     HapticFeedback.lightImpact();
+                    final newValue = !item.isBumped;
+                    ref.read(clientServiceProvider).send(jsonEncode({
+                      'type': 'ItemBumped',
+                      'orderUuid': order.uuid,
+                      'itemUuid': item.uuid,
+                      'isBumped': newValue,
+                    }));
                     ref.read(clientStateProvider.notifier).toggleItemBump(order.uuid, item.uuid);
                   },
                   child: AnimatedOpacity(
@@ -665,11 +757,21 @@ class _TicketCard extends ConsumerWidget {
       onTap: () {
         HapticFeedback.heavyImpact();
         if (allBumped) {
+          ref.read(clientServiceProvider).send(jsonEncode({
+            'type': 'TicketFinished',
+            'orderUuid': order.uuid,
+          }));
           onFinished?.call();
           ref.read(clientStateProvider.notifier).removeOrder(order.uuid);
         } else {
           for (var item in items) {
             if (!item.isBumped) {
+              ref.read(clientServiceProvider).send(jsonEncode({
+                'type': 'ItemBumped',
+                'orderUuid': order.uuid,
+                'itemUuid': item.uuid,
+                'isBumped': true,
+              }));
               ref.read(clientStateProvider.notifier).toggleItemBump(order.uuid, item.uuid);
             }
           }

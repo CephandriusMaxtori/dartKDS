@@ -10,6 +10,7 @@ import '../../../models/order_status.dart';
 import '../../../models/item_status.dart';
 import '../../../providers/intake_provider.dart';
 import '../../../providers/service_providers.dart';
+import '../../../providers/settings_provider.dart';
 
 class OrderIntakeView extends ConsumerStatefulWidget {
   const OrderIntakeView({super.key});
@@ -22,6 +23,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   late ConfettiController _confettiController;
   String _searchQuery = '';
   String _selectedCategory = 'ALL';
+  String _selectedTag = 'ALL';
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   Widget build(BuildContext context) {
     final db = ref.watch(databaseProvider);
     final intakeState = ref.watch(intakeProvider);
+    
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -47,13 +50,16 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       totalPrice += item.menuItem.price * item.quantity;
     }
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bottomHeight = (screenHeight * 0.4).clamp(160.0, 280.0);
+
     return Stack(
       children: [
         Column(
           children: [
             // Search and Categories - Refined Design
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               decoration: BoxDecoration(
                 color: theme.scaffoldBackgroundColor,
                 border: Border(bottom: BorderSide(color: theme.dividerColor)),
@@ -70,7 +76,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       filled: true,
                       fillColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: theme.dividerColor),
@@ -81,55 +87,34 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  StreamBuilder<List<String>>(
-                    stream: db.select(db.menuItems).watch().map((items) => ['ALL', ...{...items.map((i) => i.category.toUpperCase())}]),
-                    builder: (context, snapshot) {
-                      final categories = snapshot.data ?? ['ALL'];
-                      return SizedBox(
-                        height: 36,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: categories.length,
-                          separatorBuilder: (context, index) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final cat = categories[index];
-                            final isSelected = _selectedCategory == cat;
-                            return InkWell(
-                              onTap: () => setState(() => _selectedCategory = cat),
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? const Color(0xFF111111) : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: isSelected ? const Color(0xFF111111) : theme.dividerColor,
-                                  ),
-                                ),
-                                child: Text(
-                                  cat,
-                                  style: TextStyle(
-                                    color: isSelected ? Colors.white : theme.textTheme.bodyMedium?.color,
-                                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
-                                    fontSize: 11,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 8),
+                  _buildFilterChipRow(
+                    stream: db.select(db.menuItems).watch().map((items) {
+                      final cats = items.map((i) => i.category.trim().toUpperCase())
+                          .where((c) => c.isNotEmpty && c != 'ALL' && c != 'ALL ITEMS')
+                          .toSet();
+                      return ['ALL', ...cats];
+                    }),
+                    selected: _selectedCategory,
+                    onSelected: (c) => setState(() => _selectedCategory = c),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildFilterChipRow(
+                    stream: db.select(db.menuItems).watch().map((items) {
+                      final tags = items.expand((i) => i.tags)
+                          .map((t) => t.trim().toUpperCase())
+                          .where((t) => t.isNotEmpty && t != 'ALL')
+                          .toSet();
+                      return ['ALL', ...tags];
+                    }),
+                    selected: _selectedTag,
+                    onSelected: (t) => setState(() => _selectedTag = t),
                   ),
                 ],
               ),
             ),
             // Menu Grid
             Expanded(
-              flex: 60,
               child: StreamBuilder<List<MenuItemData>>(
                 stream: db.select(db.menuItems).watch(),
                 builder: (context, snapshot) {
@@ -139,6 +124,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                   var items = snapshot.data!;
                   if (_selectedCategory != 'ALL') items = items.where((i) => i.category.toUpperCase() == _selectedCategory).toList();
                   if (_searchQuery.isNotEmpty) items = items.where((i) => i.name.toLowerCase().contains(_searchQuery)).toList();
+                  if (_selectedTag != 'ALL') items = items.where((i) => i.tags.any((t) => t.toUpperCase() == _selectedTag)).toList();
                   
                   if (items.isEmpty) {
                     return Center(child: Text('No items found', style: TextStyle(color: theme.hintColor, fontWeight: FontWeight.w600)));
@@ -187,6 +173,21 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const Spacer(),
+                                if (item.tags.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      item.tags.take(2).join(' • ').toUpperCase(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.4,
+                                        color: isOut ? theme.hintColor : const Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -220,8 +221,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               ),
             ),
             // Current Ticket Sidebar (Repurposed as bottom-snap for mobile)
-            Container(
-              height: 280,
+            if (intakeState.items.isNotEmpty)
+              Container(
+                height: bottomHeight,
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: theme.dividerColor, width: 2)),
               ),
@@ -230,19 +232,20 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('CURRENT TICKET', style: theme.textTheme.labelLarge),
+                          Text('CURRENT TICKET (${intakeState.items.length})', style: theme.textTheme.labelLarge),
                           if (intakeState.items.isNotEmpty)
                             TextButton(
                               onPressed: () => ref.read(intakeProvider.notifier).clear(),
-                              child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 12)),
+                              child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 11)),
                             ),
                         ],
                       ),
                     ),
+                    const Divider(height: 1),
                     Expanded(
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -281,7 +284,10 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text('COMPLETE ORDER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                              Text(
+                                intakeState.editingOrderUuid != null ? 'UPDATE ORDER' : 'COMPLETE ORDER', 
+                                style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)
+                              ),
                               if (totalPrice > 0) ...[
                                 const SizedBox(width: 12),
                                 const Text('•', style: TextStyle(color: Colors.white38)),
@@ -316,6 +322,56 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     );
   }
 
+  Widget _buildFilterChipRow({
+    required Stream<List<String>> stream,
+    required String selected,
+    required ValueChanged<String> onSelected,
+  }) {
+    final theme = Theme.of(context);
+    return StreamBuilder<List<String>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        final values = snapshot.data ?? ['ALL'];
+        return SizedBox(
+          height: 32,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: values.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final value = values[index];
+              final isSelected = selected == value;
+              return InkWell(
+                onTap: () => onSelected(value),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF111111) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF111111) : theme.dividerColor,
+                    ),
+                  ),
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : theme.textTheme.bodyMedium?.color,
+                      fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   void _handleItemTap(BuildContext context, WidgetRef ref, MenuItemData item) {
     _showModifierDialog(context, ref, item);
   }
@@ -332,8 +388,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           stream: db.select(db.globalModifiers).watch(),
           builder: (context, snapshot) {
             final globals = snapshot.data ?? [];
-            final allModifiers = {...item.modifiers, ...globals.map((g) => g.name)}.toList();
             final requiredMods = item.requiredModifiers ?? [];
+            final allModifiers = {
+              ...requiredMods,
+              ...item.modifiers,
+              ...globals.map((g) => g.name)
+            }.toList();
             bool isRequirementMet = requiredMods.isEmpty || selected.any((s) => requiredMods.contains(s));
 
             return AlertDialog(
@@ -391,7 +451,18 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text('MODIFIERS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF666666), letterSpacing: 1)),
+                    Row(
+                      children: [
+                        const Text('MODIFIERS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF666666), letterSpacing: 1)),
+                        const Spacer(),
+                        if (requiredMods.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: const Text('SELECTION REQUIRED', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.w900)),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
@@ -405,11 +476,20 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                           onSelected: (val) => setDialogState(() => val ? selected.add(mod) : selected.remove(mod)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),
-                            side: BorderSide(color: isReq && !isSelected ? Colors.red : (isSelected ? Colors.transparent : Theme.of(context).dividerColor)),
+                            side: BorderSide(
+                              color: isReq && !isSelected 
+                                ? Colors.red 
+                                : (isSelected ? Colors.transparent : Theme.of(context).dividerColor),
+                              width: isReq && !isSelected ? 1.5 : 1,
+                            ),
                           ),
                           backgroundColor: Colors.transparent,
                           selectedColor: const Color(0xFF111111),
-                          labelStyle: TextStyle(color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color, fontWeight: FontWeight.w700, fontSize: 12),
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : (isReq ? Colors.red.shade700 : Theme.of(context).textTheme.bodyMedium?.color),
+                            fontWeight: (isSelected || isReq) ? FontWeight.w900 : FontWeight.w700,
+                            fontSize: 12
+                          ),
                           showCheckmark: false,
                         );
                       }).toList(),
@@ -447,21 +527,48 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final state = ref.read(intakeProvider);
     final db = ref.read(databaseProvider);
     final server = ref.read(hostServerProvider);
-    final orderUuid = const Uuid().v4();
+    
+    final isEditing = state.editingOrderUuid != null;
+    final orderUuid = state.editingOrderUuid ?? const Uuid().v4();
     final timestamp = DateTime.now();
 
-    await db.into(db.kDSOrders).insert(KDSOrderData(
-      uuid: orderUuid,
-      customerName: state.customerName.isEmpty ? 'Guest' : state.customerName,
-      timestamp: timestamp,
-      status: OrderStatus.pending,
-    ));
+    if (isEditing) {
+      // 1. Restore stock for old items before replacement
+      final oldItems = await (db.select(db.kDSItems)..where((t) => t.orderUuid.equals(orderUuid))).get();
+      for (final oldItem in oldItems) {
+        final menuMatches = await (db.select(db.menuItems)..where((t) => t.name.equals(oldItem.name))).get();
+        if (menuMatches.isNotEmpty && menuMatches.first.trackStock) {
+          await (db.update(db.menuItems)..where((t) => t.id.equals(menuMatches.first.id))).write(
+            MenuItemsCompanion(stockQuantity: drift.Value(menuMatches.first.stockQuantity + 1)),
+          );
+        }
+      }
+      // 2. Clear old items
+      await (db.delete(db.kDSItems)..where((t) => t.orderUuid.equals(orderUuid))).go();
+      // 3. Update order record
+      await (db.update(db.kDSOrders)..where((t) => t.uuid.equals(orderUuid))).write(
+        KDSOrdersCompanion(
+          customerName: drift.Value(state.customerName.isEmpty ? 'Guest' : state.customerName),
+          timestamp: drift.Value(timestamp),
+          status: const drift.Value(OrderStatus.pending),
+        ),
+      );
+    } else {
+      await db.into(db.kDSOrders).insert(KDSOrderData(
+        uuid: orderUuid,
+        customerName: state.customerName.isEmpty ? 'Guest' : state.customerName,
+        timestamp: timestamp,
+        status: OrderStatus.pending,
+      ));
+    }
 
     final List<Map<String, dynamic>> jsonItems = [];
     for (final item in state.items) {
       if (item.menuItem.trackStock) {
+        // Re-fetch to get latest stock after restoration (if any)
+        final fresh = await (db.select(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).getSingle();
         await (db.update(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).write(
-          MenuItemsCompanion(stockQuantity: drift.Value(item.menuItem.stockQuantity - item.quantity)),
+          MenuItemsCompanion(stockQuantity: drift.Value(fresh.stockQuantity - item.quantity)),
         );
       }
       for (int i = 0; i < item.quantity; i++) {
@@ -487,7 +594,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     }
 
     final broadcastPayload = jsonEncode({
-      'type': 'OrderCreated',
+      'type': isEditing ? 'OrderUpdated' : 'OrderCreated',
       'order': {
         'uuid': orderUuid,
         'customerName': state.customerName.isEmpty ? 'Guest' : state.customerName,
@@ -499,7 +606,15 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
     server.broadcast(broadcastPayload);
     ref.read(intakeProvider.notifier).clear();
-    _confettiController.play();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Sent Successfully'), backgroundColor: Color(0xFF111111)));
+    
+    if (ref.read(settingsProvider).enableConfetti) {
+      _confettiController.play();
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isEditing ? 'Order Updated Successfully' : 'Order Sent Successfully'), 
+        backgroundColor: const Color(0xFF111111)
+      )
+    );
   }
 }

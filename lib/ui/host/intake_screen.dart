@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/database.dart';
@@ -264,38 +265,40 @@ class _IntakeScreenState extends ConsumerState<IntakeScreen> {
   Widget _buildCartSidebar(BuildContext context, IntakeState intakeState) {
     return Container(
       width: 380,
-      color: Colors.white,
-      child: Column(
-        children: [
-          _buildCustomerField(),
-          Expanded(
-            child: ListView.builder(
-              itemCount: intakeState.items.length,
-              itemBuilder: (context, index) {
-                final cartItem = intakeState.items[index];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  title: Text(cartItem.menuItem.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: cartItem.selectedModifiers.isNotEmpty
-                      ? Text(cartItem.selectedModifiers.join(', '), style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w600))
-                      : null,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, color: Colors.grey),
-                    onPressed: () => ref.read(intakeProvider.notifier).removeItem(index),
-                  ),
-                  onTap: () => _showModifierDialog(
-                    context,
-                    ref,
-                    cartItem.menuItem,
-                    editIndex: index,
-                    initialSelected: cartItem.selectedModifiers,
-                  ),
-                );
-              },
+      child: Material(
+        color: Colors.white,
+        child: Column(
+          children: [
+            _buildCustomerField(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: intakeState.items.length,
+                itemBuilder: (context, index) {
+                  final cartItem = intakeState.items[index];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    title: Text(cartItem.menuItem.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: cartItem.selectedModifiers.isNotEmpty
+                        ? Text(cartItem.selectedModifiers.join(', '), style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w600))
+                        : null,
+                    trailing: IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, color: Colors.grey),
+                      onPressed: () => ref.read(intakeProvider.notifier).removeItem(index),
+                    ),
+                    onTap: () => _showModifierDialog(
+                      context,
+                      ref,
+                      cartItem.menuItem,
+                      editIndex: index,
+                      initialSelected: cartItem.selectedModifiers,
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-          _buildActionFooter(context, intakeState),
-        ],
+            _buildActionFooter(context, intakeState),
+          ],
+        ),
       ),
     );
   }
@@ -401,7 +404,7 @@ class _IntakeScreenState extends ConsumerState<IntakeScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF007AFF), foregroundColor: Colors.white),
               onPressed: () {
                 if (editIndex != null) {
-                  ref.read(intakeProvider.notifier).updateItemModifiers(editIndex, selected);
+                  ref.read(intakeProvider.notifier).updateItem(editIndex, modifiers: selected);
                 } else {
                   ref.read(intakeProvider.notifier).addItem(item, selectedModifiers: selected);
                 }
