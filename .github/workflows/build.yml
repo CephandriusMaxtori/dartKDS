@@ -41,7 +41,7 @@ jobs:
         run: flutter test
 
       - name: Setup Android Signing Key (Optional)
-        if: ${{ secrets.ENCODED_KEYSTORE != '' }}
+       if: ${{ secrets.ENCODED_KEYSTORE }}
         env:
           ENCODED_KEYSTORE: ${{ secrets.ENCODED_KEYSTORE }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
