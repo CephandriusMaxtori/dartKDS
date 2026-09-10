@@ -9,7 +9,7 @@ class RoleSelectionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F8F6), // Warm Neutral Stone
       body: SafeArea(
@@ -29,7 +29,11 @@ class RoleSelectionScreen extends ConsumerWidget {
                       color: const Color(0xFF111111),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.restaurant_menu_rounded, color: Colors.white, size: 28),
+                    child: const Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   const Column(
@@ -73,7 +77,8 @@ class RoleSelectionScreen extends ConsumerWidget {
                 context: context,
                 title: 'PRIMARY HOST',
                 subtitle: 'Order Intake & Local Server',
-                description: 'This device will host the database and manage all connected displays.',
+                description:
+                    'This device will host the database and manage all connected displays.',
                 icon: Icons.dns_outlined,
                 accentColor: const Color(0xFF2563EB),
                 onTap: () async {
@@ -81,24 +86,36 @@ class RoleSelectionScreen extends ConsumerWidget {
                     showDialog(
                       context: context,
                       barrierDismissible: false,
-                      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF111111), strokeWidth: 3)),
+                      builder: (context) => const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF111111),
+                          strokeWidth: 3,
+                        ),
+                      ),
                     );
-                    
+
                     final db = ref.read(databaseProvider);
                     await ref.read(hostServerProvider).start(db);
                     await Future.delayed(const Duration(milliseconds: 600));
                     await ref.read(discoveryServiceProvider).register(8080);
-                    
+
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ref.read(deviceRoleProvider.notifier).state = DeviceRole.host;
+                      ref.read(deviceRoleProvider.notifier).state =
+                          DeviceRole.host;
                     }
                   } catch (e) {
                     if (context.mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('INIT FAILED: $e', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                          content: Text(
+                            'INIT FAILED: $e',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
                           backgroundColor: const Color(0xFF111111),
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -113,18 +130,20 @@ class RoleSelectionScreen extends ConsumerWidget {
                 context: context,
                 title: 'DISPLAY CLIENT',
                 subtitle: 'Kitchen Prep / Expo Screen',
-                description: 'Connects to a Host to view, track, and bump incoming orders.',
+                description:
+                    'Connects to a Host to view, track, and bump incoming orders.',
                 icon: Icons.tablet_android_rounded,
                 accentColor: const Color(0xFF059669),
                 onTap: () {
-                  ref.read(deviceRoleProvider.notifier).state = DeviceRole.client;
+                  ref.read(deviceRoleProvider.notifier).state =
+                      DeviceRole.client;
                 },
               ),
               const Spacer(flex: 2),
               const Align(
                 alignment: Alignment.center,
                 child: Text(
-                  'STABLE BUILD v1.0.1 • AIR-GAPPED OFFLINE PROTOCOL',
+                  'STABLE BUILD v1.0.1',
                   style: TextStyle(
                     color: Color(0xFFBBBBBB),
                     fontSize: 9,
@@ -179,7 +198,11 @@ class RoleSelectionScreen extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFDDDDDD), size: 14),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Color(0xFFDDDDDD),
+                    size: 14,
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
