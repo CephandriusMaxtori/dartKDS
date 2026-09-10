@@ -52,6 +52,7 @@ class SyncService {
   final _statusController = StreamController<SyncStatus>.broadcast();
 
   Stream<SyncStatus> get statusStream => _statusController.stream;
+  List<SyncPeer> get peers => _peers.values.toList();
   SyncStatus get currentStatus => SyncStatus(
     isRunning: _isRunning,
     peers: _peers.values.toList(),

@@ -27,6 +27,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   final _globalModifierController = TextEditingController();
   final _priceController = TextEditingController();
   final _stockController = TextEditingController();
+  final _categoryController = TextEditingController(text: 'All Items');
   bool _trackStock = false;
   String? _selectedStation;
 
@@ -40,6 +41,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     _globalModifierController.dispose();
     _priceController.dispose();
     _stockController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 
@@ -67,12 +69,13 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               TabBar(
                 isScrollable: false,
                 tabAlignment: TabAlignment.fill,
-                labelColor: const Color(0xFF111111),
-                unselectedLabelColor: const Color(0xFF666666),
-                indicatorColor: const Color(0xFF111111),
+                labelColor: Theme.of(context).colorScheme.onSurface,
+                unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                indicatorColor: Theme.of(context).colorScheme.onSurface,
                 indicatorWeight: 3,
                 labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
                 unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                dividerColor: theme.dividerColor,
                 tabs: const [
                   Tab(text: 'ITEMS'),
                   Tab(text: 'STATIONS'),
@@ -132,6 +135,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                       const SizedBox(height: 12),
                       _buildTextField(_tagsController, 'Tags (for menu filters)', hint: 'Gluten Free, Spicy, Chef Special'),
                       const SizedBox(height: 12),
+                      _buildTextField(_categoryController, 'Category', hint: 'e.g. Burgers, Sides, Drinks'),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: _selectedStation,
                         decoration: _inputDecoration('Routing Station'),
@@ -171,7 +176,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
                                   guid: drift.Value(const Uuid().v4()),
                                   name: _nameController.text,
-                                  category: 'All Items',
+                                  category: _categoryController.text.isEmpty ? 'All Items' : _categoryController.text.trim(),
                                   defaultStation: _selectedStation!,
                                   modifiers: mods,
                                   requiredModifiers: drift.Value(reqs),
@@ -187,6 +192,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             _tagsController.clear();
                             _priceController.clear();
                             _stockController.clear();
+                            _categoryController.text = 'All Items';
                             setState(() => _trackStock = false);
                           }
                         },
@@ -576,6 +582,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     final modCtrl = TextEditingController(text: item.modifiers.join(', '));
     final reqModCtrl = TextEditingController(text: (item.requiredModifiers ?? []).join(', '));
     final tagsCtrl = TextEditingController(text: item.tags.join(', '));
+    final categoryCtrl = TextEditingController(text: item.category);
     final priceCtrl = TextEditingController(text: item.price.toString());
     final stockCtrl = TextEditingController(text: item.stockQuantity.toString());
     bool trackStock = item.trackStock;
@@ -602,6 +609,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 const SizedBox(height: 12),
                 _buildTextField(tagsCtrl, 'Tags (for menu filters)'),
                 const SizedBox(height: 12),
+                _buildTextField(categoryCtrl, 'Category'),
+                const SizedBox(height: 12),
                 SwitchListTile(title: const Text('TRACK INVENTORY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)), value: trackStock, onChanged: (val) => setDialogState(() => trackStock = val), contentPadding: EdgeInsets.zero),
                 if (trackStock) _buildTextField(stockCtrl, 'Current Stock', keyboard: TextInputType.number),
                 const SizedBox(height: 12),
@@ -621,7 +630,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               onPressed: () async {
                 if (nameCtrl.text.isNotEmpty) {
                   final tags = tagsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), tags: drift.Value(tags), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock), updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch)));
+                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), category: drift.Value(categoryCtrl.text.isEmpty ? 'All Items' : categoryCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), tags: drift.Value(tags), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock), updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch)));
                   if (context.mounted) Navigator.pop(context);
                 }
               },

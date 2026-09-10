@@ -12,7 +12,7 @@ class RoleSelectionScreen extends ConsumerWidget {
     final hostIdentity = ref.watch(hostIdentityProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F8F6), // Warm Neutral Stone
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40.0),
@@ -27,33 +27,33 @@ class RoleSelectionScreen extends ConsumerWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF111111),
+                      color: theme.colorScheme.onSurface,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.restaurant_menu_rounded,
-                      color: Colors.white,
+                      color: theme.colorScheme.surface,
                       size: 28,
                     ),
                   ),
                   const SizedBox(width: 16),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'DARTKDS',
                         style: TextStyle(
-                          color: Color(0xFF111111),
+                          color: theme.colorScheme.onSurface,
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.8,
                         ),
                       ),
-                      Text(
+                      const Text(
                         'Go Warriors',
                         style: TextStyle(
                           color: Color(0xFF522323),
-                          fontSize: 10,
+                          fontSize: 30,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.5,
                         ),
@@ -63,10 +63,10 @@ class RoleSelectionScreen extends ConsumerWidget {
                 ],
               ),
               const Spacer(),
-              const Text(
+              Text(
                 'ASSIGN DEVICE ROLE',
                 style: TextStyle(
-                  color: Color(0xFF666666),
+                  color: theme.hintColor,
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.2,
@@ -89,7 +89,7 @@ class RoleSelectionScreen extends ConsumerWidget {
                       barrierDismissible: false,
                       builder: (context) => const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFF111111),
+                          color: Color(0xFF2563EB),
                           strokeWidth: 3,
                         ),
                       ),
@@ -98,13 +98,37 @@ class RoleSelectionScreen extends ConsumerWidget {
                     final db = ref.read(databaseProvider);
                     await ref.read(hostServerProvider).start(db);
                     await Future.delayed(const Duration(milliseconds: 600));
-                    ref.read(hostIdentityProvider.notifier).setRole(HostRole.primary);
+                    ref
+                        .read(hostIdentityProvider.notifier)
+                        .setRole(HostRole.primary);
                     final identity = ref.read(hostIdentityProvider);
-                    await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'primary');
-                    ref.read(syncServiceProvider).start(
-                      identity.hostId,
-                      ref.read(discoveryServiceProvider).discover(),
-                    );
+                    await ref
+                        .read(discoveryServiceProvider)
+                        .register(
+                          8080,
+                          hostId: identity.hostId,
+                          role: 'primary',
+                        );
+                    ref
+                        .read(syncServiceProvider)
+                        .start(
+                          identity.hostId,
+                          ref.read(discoveryServiceProvider).discover(),
+                        );
+                    ref
+                        .read(hostServerProvider)
+                        .setIdentity(identity.hostId, 'primary');
+                    ref.read(hostServerProvider).knownPeersProvider = () => ref
+                        .read(syncServiceProvider)
+                        .peers
+                        .map(
+                          (p) => {
+                            'hostId': p.hostId,
+                            'role': p.role,
+                            'url': 'http://${p.address}:${p.port}',
+                          },
+                        )
+                        .toList();
 
                     if (context.mounted) {
                       Navigator.pop(context);
@@ -118,13 +142,9 @@ class RoleSelectionScreen extends ConsumerWidget {
                         SnackBar(
                           content: Text(
                             'INIT FAILED: $e',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
                           ),
-                          backgroundColor: const Color(0xFF111111),
-                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFDC2626) : const Color(0xFF111111),
                         ),
                       );
                     }
@@ -148,7 +168,7 @@ class RoleSelectionScreen extends ConsumerWidget {
                       barrierDismissible: false,
                       builder: (context) => const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFF111111),
+                          color: Color(0xFF2563EB),
                           strokeWidth: 3,
                         ),
                       ),
@@ -157,13 +177,37 @@ class RoleSelectionScreen extends ConsumerWidget {
                     final db = ref.read(databaseProvider);
                     await ref.read(hostServerProvider).start(db);
                     await Future.delayed(const Duration(milliseconds: 600));
-                    ref.read(hostIdentityProvider.notifier).setRole(HostRole.backup);
+                    ref
+                        .read(hostIdentityProvider.notifier)
+                        .setRole(HostRole.backup);
                     final identity = ref.read(hostIdentityProvider);
-                    await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'backup');
-                    ref.read(syncServiceProvider).start(
-                      identity.hostId,
-                      ref.read(discoveryServiceProvider).discover(),
-                    );
+                    await ref
+                        .read(discoveryServiceProvider)
+                        .register(
+                          8080,
+                          hostId: identity.hostId,
+                          role: 'backup',
+                        );
+                    ref
+                        .read(syncServiceProvider)
+                        .start(
+                          identity.hostId,
+                          ref.read(discoveryServiceProvider).discover(),
+                        );
+                    ref
+                        .read(hostServerProvider)
+                        .setIdentity(identity.hostId, 'backup');
+                    ref.read(hostServerProvider).knownPeersProvider = () => ref
+                        .read(syncServiceProvider)
+                        .peers
+                        .map(
+                          (p) => {
+                            'hostId': p.hostId,
+                            'role': p.role,
+                            'url': 'http://${p.address}:${p.port}',
+                          },
+                        )
+                        .toList();
 
                     if (context.mounted) {
                       Navigator.pop(context);
@@ -177,13 +221,9 @@ class RoleSelectionScreen extends ConsumerWidget {
                         SnackBar(
                           content: Text(
                             'INIT FAILED: $e',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
                           ),
-                          backgroundColor: const Color(0xFF111111),
-                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFDC2626) : const Color(0xFF111111),
                         ),
                       );
                     }
@@ -235,24 +275,25 @@ class RoleSelectionScreen extends ConsumerWidget {
     required Color accentColor,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(8),
+      color: theme.cardColor,
+      borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE5E2DC), width: 1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: theme.dividerColor, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(icon, color: const Color(0xFF111111), size: 24),
+                  Icon(icon, color: theme.colorScheme.onSurface, size: 24),
                   const SizedBox(width: 12),
                   Text(
                     title,
@@ -264,9 +305,9 @@ class RoleSelectionScreen extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_ios_rounded,
-                    color: Color(0xFFDDDDDD),
+                    color: theme.hintColor,
                     size: 14,
                   ),
                 ],
@@ -274,8 +315,8 @@ class RoleSelectionScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Color(0xFF111111),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.4,
@@ -284,8 +325,8 @@ class RoleSelectionScreen extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(
-                  color: Color(0xFF666666),
+                style: TextStyle(
+                  color: theme.hintColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   height: 1.4,

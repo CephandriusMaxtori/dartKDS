@@ -19,6 +19,13 @@ class HostServer {
   final List<ConnectedClient> _clients = [];
   HttpServer? _server;
   KDSDatabase? _db;
+  int _port = 8080;
+  String hostId = '';
+  String role = 'primary';
+
+  // Provides the list of known sync peers ({hostId, role, url}) so the web
+  // UI can discover failover targets. Set after SyncService starts.
+  List<Map<String, String>> Function()? knownPeersProvider;
 
   // Callback to notify UI of client changes
   Function? onClientsChanged;
@@ -27,6 +34,7 @@ class HostServer {
 
   Future<void> start(KDSDatabase db, {int port = 8080}) async {
     _db = db;
+    _port = port;
     final router = Router();
 
     // Serve the Web KDS Client
@@ -244,7 +252,22 @@ class HostServer {
       return Response.ok(jsonEncode(data), headers: {'Content-Type': 'application/json'});
     });
 
-    // API: Export Library Backup
+    // API: Known hosts (self + discovered sync peers) for web failover
+    router.get('/api/hosts', (Request request) async {
+      final selfUrl = await _selfHostUrl();
+      final peers = knownPeersProvider?.call() ?? const <Map<String, String>>[];
+      final hosts = <Map<String, String>>[
+        {'hostId': hostId, 'role': role, 'url': selfUrl},
+        ...peers,
+      ];
+      return Response.ok(
+        jsonEncode({
+          'self': {'hostId': hostId, 'role': role, 'url': selfUrl},
+          'hosts': hosts,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    });
     router.get('/api/library/export', (Request request) async {
       final db = _db!;
       final items = await db.select(db.menuItems).get();
@@ -441,6 +464,24 @@ class HostServer {
     }));
 
     _server = await io.serve(router, InternetAddress.anyIPv4, port);
+  }
+
+  void setIdentity(String hostId, String role) {
+    this.hostId = hostId;
+    this.role = role;
+  }
+
+  Future<String> _selfHostUrl() async {
+    try {
+      final interfaces =
+          await NetworkInterface.list(type: InternetAddressType.IPv4, includeLoopback: false);
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (!addr.isLoopback) return 'http://${addr.address}:$_port';
+        }
+      }
+    } catch (_) {}
+    return 'http://localhost:$_port';
   }
 
   Future<void> stop() async {

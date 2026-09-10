@@ -102,11 +102,11 @@ class InventoryView extends ConsumerWidget {
                                 const Divider(height: 24),
                                 Row(
                                   children: [
-                                    _quickAdjust(db, item, -1, '-1'),
+                                    _quickAdjust(context, db, item, -1, '-1'),
                                     const SizedBox(width: 8),
-                                    _quickAdjust(db, item, 1, '+1'),
+                                    _quickAdjust(context, db, item, 1, '+1'),
                                     const SizedBox(width: 8),
-                                    _quickAdjust(db, item, 0, 'Zero', col: Colors.red),
+                                    _quickAdjust(context, db, item, 0, 'Zero', col: Colors.red),
                                     const SizedBox(width: 8),
                                     Expanded(child: _setButton(context, db, item)),
                                   ],
@@ -124,9 +124,9 @@ class InventoryView extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                _quickAdjust(db, item, -1, '-1'),
+                                _quickAdjust(context, db, item, -1, '-1'),
                                 const SizedBox(width: 8),
-                                _quickAdjust(db, item, 1, '+1'),
+                                _quickAdjust(context, db, item, 1, '+1'),
                                 const SizedBox(width: 16),
                                 Container(
                                   width: 80,
@@ -134,7 +134,7 @@ class InventoryView extends ConsumerWidget {
                                   child: Text('${item.stockQuantity}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: isOut ? Colors.red : theme.textTheme.bodyLarge?.color)),
                                 ),
                                 const SizedBox(width: 16),
-                                _quickAdjust(db, item, 0, 'Zero', col: Colors.red),
+                                _quickAdjust(context, db, item, 0, 'Zero', col: Colors.red),
                                 const SizedBox(width: 8),
                                 _setButton(context, db, item),
                               ],
@@ -151,8 +151,9 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-  Widget _quickAdjust(KDSDatabase db, MenuItemData item, int val, String label, {Color? col}) {
-    final color = col ?? const Color(0xFF111111);
+  Widget _quickAdjust(BuildContext context, KDSDatabase db, MenuItemData item, int val, String label, {Color? col}) {
+    final theme = Theme.of(context);
+    final color = col ?? theme.colorScheme.onSurface;
     return InkWell(
       onTap: () {
         HapticFeedback.lightImpact();
@@ -164,16 +165,26 @@ class InventoryView extends ConsumerWidget {
         width: 50,
         height: 44,
         alignment: Alignment.center,
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.2))),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withValues(alpha: 0.2))),
         child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11)),
       ),
     );
   }
 
   Widget _setButton(BuildContext context, KDSDatabase db, MenuItemData item) {
+    final theme = Theme.of(context);
     return ElevatedButton(
       onPressed: () => _showSetStockDialog(context, db, item),
-      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF3F4F6), foregroundColor: const Color(0xFF111111), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: theme.brightness == Brightness.dark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+        foregroundColor: theme.colorScheme.onSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: BorderSide(color: theme.dividerColor),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      ),
       child: const Text('SET', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
     );
   }

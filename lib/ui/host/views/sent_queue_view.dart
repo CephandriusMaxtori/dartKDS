@@ -19,6 +19,7 @@ class SentQueueView extends ConsumerWidget {
     final db = ref.watch(databaseProvider);
     final settings = ref.watch(settingsProvider);
     final server = ref.watch(hostServerProvider);
+    final theme = Theme.of(context);
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
 
     return StreamBuilder<List<KDSOrderData>>(
@@ -26,15 +27,32 @@ class SentQueueView extends ConsumerWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final orders = snapshot.data!;
+        final emptyColor = theme.hintColor;
 
         if (orders.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.history, size: 64, color: Color(0xFFE5E7EB)),
-                SizedBox(height: 16),
-                Text('No Orders Sent Yet', style: TextStyle(color: Color(0xFF6B7280))),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: theme.dividerColor.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.history_rounded, size: 56, color: emptyColor.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(height: 20),
+                Text('No Orders Sent Yet', style: TextStyle(color: emptyColor, fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Completed orders will appear here for recall or editing.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: emptyColor.withValues(alpha: 0.7), fontSize: 12),
+                  ),
+                ),
               ],
             ),
           );
@@ -49,8 +67,8 @@ class SentQueueView extends ConsumerWidget {
               elevation: 0,
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: Color(0xFFE5E7EB)),
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: theme.dividerColor),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -62,13 +80,13 @@ class SentQueueView extends ConsumerWidget {
                       children: [
                         Text(
                           'Order #${order.uuid.substring(0, 4).toUpperCase()}',
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: theme.textTheme.bodyLarge?.color),
                         ),
                         Row(
                           children: [
                             Text(
                               DateFormat(timeFormat).format(order.timestamp),
-                              style: const TextStyle(color: Color(0xFF6B7280), fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                              style: TextStyle(color: theme.hintColor, fontFamily: 'monospace', fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(width: 8),
                             InkWell(
@@ -76,12 +94,12 @@ class SentQueueView extends ConsumerWidget {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF111111).withOpacity(0.1),
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'EDIT',
-                                  style: TextStyle(color: Color(0xFF111111), fontWeight: FontWeight.w900, fontSize: 10),
+                                  style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w900, fontSize: 10),
                                 ),
                               ),
                             ),
@@ -91,12 +109,12 @@ class SentQueueView extends ConsumerWidget {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF2563EB).withOpacity(0.1),
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'RECALL',
-                                  style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w900, fontSize: 10),
+                                  style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 10),
                                 ),
                               ),
                             ),
@@ -128,7 +146,7 @@ class SentQueueView extends ConsumerWidget {
                                       Text(i.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                                     ],
                                   ),
-                                  Text('\$${i.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                  Text('\$${i.price.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: theme.hintColor)),
                                 ],
                               ),
                             )),
@@ -136,8 +154,8 @@ class SentQueueView extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF6B7280))),
-                                Text('\$${orderTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF2563EB))),
+                                Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: theme.hintColor)),
+                                Text('\$${orderTotal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: theme.colorScheme.primary)),
                               ],
                             ),
                           ],

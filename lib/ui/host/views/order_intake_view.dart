@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +25,8 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   String _searchQuery = '';
   String _selectedCategory = 'ALL';
   String _selectedTag = 'ALL';
+  bool _filtersExpanded = false;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -34,7 +37,15 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   @override
   void dispose() {
     _confettiController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  int _calcColumns(double width) {
+    if (width < 500) return 2;
+    if (width < 900) return 3;
+    if (width < 1400) return 4;
+    return 5;
   }
 
   @override
@@ -57,7 +68,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       children: [
         Column(
           children: [
-            // Search and Categories - Refined Design
             Container(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               decoration: BoxDecoration(
@@ -67,7 +77,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               child: Column(
                 children: [
                   TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                    onChanged: (val) {
+                      _searchDebounce?.cancel();
+                      _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                        setState(() => _searchQuery = val.toLowerCase());
+                      });
+                    },
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Search menu...',
@@ -87,33 +102,63 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  _buildFilterChipRow(
-                    stream: db.select(db.menuItems).watch().map((items) {
-                      final cats = items.map((i) => i.category.trim().toUpperCase())
-                          .where((c) => c.isNotEmpty && c != 'ALL' && c != 'ALL ITEMS')
-                          .toSet();
-                      return ['ALL', ...cats];
-                    }),
-                    selected: _selectedCategory,
-                    onSelected: (c) => setState(() => _selectedCategory = c),
+                  InkWell(
+                    onTap: () => setState(() => _filtersExpanded = !_filtersExpanded),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.tune, size: 14, color: theme.hintColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            _filtersExpanded ? 'HIDE FILTERS' : 'FILTERS',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: theme.hintColor, letterSpacing: 0.5),
+                          ),
+                          if (!_filtersExpanded && (_selectedCategory != 'ALL' || _selectedTag != 'ALL')) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: Text(
+                                '$_selectedCategory${_selectedTag != 'ALL' ? ' · $_selectedTag' : ''}',
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          Icon(_filtersExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 16, color: theme.hintColor),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  _buildFilterChipRow(
-                    stream: db.select(db.menuItems).watch().map((items) {
-                      final tags = items.expand((i) => i.tags)
-                          .map((t) => t.trim().toUpperCase())
-                          .where((t) => t.isNotEmpty && t != 'ALL')
-                          .toSet();
-                      return ['ALL', ...tags];
-                    }),
-                    selected: _selectedTag,
-                    onSelected: (t) => setState(() => _selectedTag = t),
-                  ),
+                  if (_filtersExpanded) ...[
+                    const SizedBox(height: 8),
+                    _buildFilterChipRow(
+                      stream: db.select(db.menuItems).watch().map((items) {
+                        final cats = items.map((i) => i.category.trim().toUpperCase())
+                            .where((c) => c.isNotEmpty && c != 'ALL' && c != 'ALL ITEMS')
+                            .toSet();
+                        return ['ALL', ...cats];
+                      }),
+                      selected: _selectedCategory,
+                      onSelected: (c) => setState(() => _selectedCategory = c),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildFilterChipRow(
+                      stream: db.select(db.menuItems).watch().map((items) {
+                        final tags = items.expand((i) => i.tags)
+                            .map((t) => t.trim().toUpperCase())
+                            .where((t) => t.isNotEmpty && t != 'ALL')
+                            .toSet();
+                        return ['ALL', ...tags];
+                      }),
+                      selected: _selectedTag,
+                      onSelected: (t) => setState(() => _selectedTag = t),
+                    ),
+                  ],
                 ],
               ),
             ),
-            // Menu Grid
             Expanded(
               child: StreamBuilder<List<MenuItemData>>(
                 stream: db.select(db.menuItems).watch(),
@@ -130,179 +175,227 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                     return Center(child: Text('No items found', style: TextStyle(color: theme.hintColor, fontWeight: FontWeight.w600)));
                   }
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final isOut = item.trackStock && item.stockQuantity <= 0;
-                      
-                      return Material(
-                        color: isOut ? theme.dividerColor.withOpacity(0.3) : theme.cardColor,
-                        borderRadius: BorderRadius.circular(8),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: isOut ? null : () => _handleItemTap(context, ref, item),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isOut ? Colors.transparent : theme.dividerColor,
-                                width: 1,
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.name.toUpperCase(),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900, 
-                                    fontSize: 13,
-                                    color: isOut ? theme.hintColor : theme.textTheme.bodyLarge?.color,
-                                    letterSpacing: -0.2,
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final crossCount = _calcColumns(constraints.maxWidth);
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossCount,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1,
+                        ),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          final isOut = item.trackStock && item.stockQuantity <= 0;
+                          
+                          return Material(
+                            color: isOut ? theme.dividerColor.withOpacity(0.3) : theme.cardColor,
+                            borderRadius: BorderRadius.circular(8),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: isOut ? null : () => _handleItemTap(context, ref, item),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isOut ? Colors.transparent : theme.dividerColor,
+                                    width: 1,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const Spacer(),
-                                if (item.tags.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(
-                                      item.tags.take(2).join(' • ').toUpperCase(),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.4,
-                                        color: isOut ? theme.hintColor : const Color(0xFF2563EB),
-                                      ),
-                                    ),
-                                  ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    if (item.trackStock)
-                                      Text(
-                                        'QTY: ${item.stockQuantity}',
-                                        style: TextStyle(
-                                          fontSize: 10, 
-                                          color: isOut ? Colors.red : const Color(0xFF666666), 
-                                          fontWeight: FontWeight.w800,
+                                    Text(
+                                      item.name.toUpperCase(),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900, 
+                                        fontSize: 13,
+                                        color: isOut ? theme.hintColor : theme.textTheme.bodyLarge?.color,
+                                        letterSpacing: -0.2,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const Spacer(),
+                                    if (item.tags.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 4),
+                                        child: Text(
+                                          item.tags.take(2).join(' • ').toUpperCase(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.4,
+                                            color: isOut ? theme.hintColor : const Color(0xFF2563EB),
+                                          ),
                                         ),
                                       ),
-                                    Text(
-                                      '\$${item.price.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 12, 
-                                        color: isOut ? theme.hintColor : const Color(0xFF2563EB), 
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        if (item.trackStock)
+                                          Text(
+                                            'QTY: ${item.stockQuantity}',
+                                            style: TextStyle(
+                                              fontSize: 10, 
+                                              color: isOut ? Colors.red : const Color(0xFF666666), 
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        Text(
+                                          '\$${item.price.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontSize: 12, 
+                                            color: isOut ? theme.hintColor : const Color(0xFF2563EB), 
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       );
                     },
                   );
                 },
               ),
             ),
-            // Current Ticket Sidebar (Repurposed as bottom-snap for mobile)
             if (intakeState.items.isNotEmpty)
               Container(
                 height: bottomHeight,
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: theme.dividerColor, width: 2)),
-              ),
-              child: Material(
-                color: theme.cardColor,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('CURRENT TICKET (${intakeState.items.length})', style: theme.textTheme.labelLarge),
-                          if (intakeState.items.isNotEmpty)
-                            TextButton(
-                              onPressed: () => ref.read(intakeProvider.notifier).clear(),
-                              child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 11)),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: intakeState.items.length,
-                        separatorBuilder: (context, index) => Divider(color: theme.dividerColor, height: 1),
-                        itemBuilder: (context, index) {
-                          final item = intakeState.items[index];
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            visualDensity: VisualDensity.compact,
-                            leading: Text('${item.quantity}×', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                            title: Text(item.menuItem.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                            subtitle: item.selectedModifiers.isNotEmpty 
-                              ? Text(item.selectedModifiers.join(' • '), style: const TextStyle(fontSize: 11, color: Color(0xFF666666)))
-                              : null,
-                            trailing: Text('\$${(item.menuItem.price * item.quantity).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                            onTap: () => _showModifierDialog(context, ref, item.menuItem, editIndex: index, initialSelected: item.selectedModifiers, initialQuantity: item.quantity),
-                          );
-                        },
-                      ),
-                    ),
-                    // Send Button - High Contrast Design
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: intakeState.items.isEmpty ? theme.dividerColor : const Color(0xFF111111),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: intakeState.items.isEmpty ? null : () => _sendToKitchen(context, ref),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                intakeState.editingOrderUuid != null ? 'UPDATE ORDER' : 'COMPLETE ORDER', 
-                                style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)
-                              ),
-                              if (totalPrice > 0) ...[
-                                const SizedBox(width: 12),
-                                const Text('•', style: TextStyle(color: Colors.white38)),
-                                const SizedBox(width: 12),
-                                Text('\$${totalPrice.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                              ],
-                            ],
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: theme.dividerColor, width: 2)),
+                ),
+                child: Material(
+                  color: theme.cardColor,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: TextField(
+                          onChanged: (val) => ref.read(intakeProvider.notifier).setCustomerName(val),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Customer Name (optional)',
+                            hintStyle: TextStyle(color: theme.hintColor, fontWeight: FontWeight.normal, fontSize: 12),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                            border: InputBorder.none,
+                            prefixIcon: Icon(Icons.person_outline, size: 16, color: theme.hintColor),
+                            prefixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 0),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('CURRENT TICKET (${intakeState.items.length})', style: theme.textTheme.labelLarge),
+                            TextButton(
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('RESET TICKET?', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                                    content: const Text('This will remove all items from the current ticket.'),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL', style: TextStyle(fontWeight: FontWeight.w800))),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(ctx);
+                                          ref.read(intakeProvider.notifier).clear();
+                                        },
+                                        child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: const Text('RESET', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 11)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: intakeState.items.length,
+                          separatorBuilder: (context, index) => Divider(color: theme.dividerColor, height: 1),
+                          itemBuilder: (context, index) {
+                            final item = intakeState.items[index];
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              leading: Text('${item.quantity}×', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                              title: Text(item.menuItem.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              subtitle: item.selectedModifiers.isNotEmpty 
+                                ? Text(item.selectedModifiers.join(' • '), style: const TextStyle(fontSize: 11, color: Color(0xFF666666)))
+                                : null,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('\$${(item.menuItem.price * item.quantity).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 16),
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => ref.read(intakeProvider.notifier).removeItem(index),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _showModifierDialog(context, ref, item.menuItem, editIndex: index, initialSelected: item.selectedModifiers, initialQuantity: item.quantity),
+                            );
+                          },
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: intakeState.items.isEmpty ? theme.dividerColor : const Color(0xFF111111),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: intakeState.items.isEmpty ? null : () => _sendToKitchen(context, ref),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  intakeState.editingOrderUuid != null ? 'UPDATE ORDER' : 'COMPLETE ORDER', 
+                                  style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)
+                                ),
+                                if (totalPrice > 0) ...[
+                                  const SizedBox(width: 12),
+                                  const Text('•', style: TextStyle(color: Colors.white38)),
+                                  const SizedBox(width: 12),
+                                  Text('\$${totalPrice.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         IgnorePointer(
@@ -373,6 +466,19 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   }
 
   void _handleItemTap(BuildContext context, WidgetRef ref, MenuItemData item) {
+    final hasModifiers = item.modifiers.isNotEmpty || (item.requiredModifiers ?? []).isNotEmpty;
+    if (!hasModifiers) {
+      ref.read(intakeProvider.notifier).addItem(item);
+      HapticFeedback.lightImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added: ${item.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
+          duration: const Duration(milliseconds: 800),
+          backgroundColor: const Color(0xFF111111),
+        ),
+      );
+      return;
+    }
     _showModifierDialog(context, ref, item);
   }
 
@@ -533,7 +639,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final timestamp = DateTime.now();
 
     if (isEditing) {
-      // 1. Restore stock for old items before replacement
       final oldItems = await (db.select(db.kDSItems)..where((t) => t.orderUuid.equals(orderUuid))).get();
       for (final oldItem in oldItems) {
         final menuMatches = await (db.select(db.menuItems)..where((t) => t.name.equals(oldItem.name))).get();
@@ -546,9 +651,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           );
         }
       }
-      // 2. Clear old items
       await (db.delete(db.kDSItems)..where((t) => t.orderUuid.equals(orderUuid))).go();
-      // 3. Update order record
       await (db.update(db.kDSOrders)..where((t) => t.uuid.equals(orderUuid))).write(
         KDSOrdersCompanion(
           customerName: drift.Value(state.customerName.isEmpty ? 'Guest' : state.customerName),
@@ -570,7 +673,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final List<Map<String, dynamic>> jsonItems = [];
     for (final item in state.items) {
       if (item.menuItem.trackStock) {
-        // Re-fetch to get latest stock after restoration (if any)
         final fresh = await (db.select(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).getSingle();
         await (db.update(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).write(
           MenuItemsCompanion(

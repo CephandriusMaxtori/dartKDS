@@ -229,6 +229,40 @@
         }
 
         .confetti-particle { position: fixed; z-index: 2000; pointer-events: none; }
+
+        /* ---- Polish: scrollbars, focus, hover ---- */
+        * { scrollbar-width: thin; scrollbar-color: var(--border-color) transparent; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; border: 2px solid var(--bg-color); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        button:focus-visible, input:focus-visible, select:focus-visible, .station-badge:focus-visible {
+            outline: 2px solid var(--accent-blue); outline-offset: 2px;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+            outline: none;
+        }
+
+        .settings-btn, .item-row, .ticket-footer, .btn-primary, .btn-ghost, .station-badge {
+            transition: background 0.2s, border-color 0.2s, color 0.2s, filter 0.2s;
+        }
+        .item-row:hover { background: rgba(255, 255, 255, 0.04); }
+        .ticket-footer:hover { filter: brightness(1.08); }
+        .ticket-footer:active { filter: brightness(0.92); }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-ghost:hover { background: var(--border-color); }
+        .station-badge:hover { filter: brightness(1.08); }
+
+        body.light-mode .item-row:hover { background: rgba(0, 0, 0, 0.04); }
+        body.light-mode .settings-btn:hover { background-color: rgba(0, 0, 0, 0.08); }
+        body.light-mode .ticket-card { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+        body.light-mode .modifiers-box { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
+
+        .empty-state { opacity: 0.3; }
+        .empty-state h1 { letter-spacing: 6px; }
     </style>
 </head>
 <body>
@@ -314,6 +348,155 @@
 
         localStorage.setItem('kds_client_id', clientId);
 
+        // ---------- Host failover ----------
+        const HOSTS_KEY = 'dartkds_hosts';
+        let apiBase = window.location.origin.replace(/\/+$/, '');
+        let knownHosts = loadHosts();
+        let failoverLock = false;
+
+        function hostBase() { return apiBase; }
+
+        function loadHosts() {
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem(HOSTS_KEY) || '[]'); } catch (e) { list = []; }
+            for (const h of list) h.url = (h.url || '').replace(/\/+$/, '');
+            const self = { url: window.location.origin.replace(/\/+$/, ''), hostId: '', role: 'unknown', self: true };
+            if (!list.some(h => h.url === self.url)) list.unshift(self);
+            return list;
+        }
+
+        function saveHosts() {
+            try { localStorage.setItem(HOSTS_KEY, JSON.stringify(knownHosts)); } catch (e) {}
+        }
+
+        function mergeHosts(hostList) {
+            (hostList || []).forEach(h => {
+                const url = (h.url || '').replace(/\/+$/, '');
+                if (!url) return;
+                const existing = knownHosts.find(x => x.url === url);
+                if (existing) {
+                    existing.role = h.role || existing.role;
+                    existing.hostId = h.hostId || existing.hostId;
+                } else {
+                    knownHosts.push({ url, role: h.role || 'unknown', hostId: h.hostId || '', self: false });
+                }
+            });
+            saveHosts();
+        }
+
+        function hostEntryFor(url) {
+            return knownHosts.find(h => h.url === (url || '').replace(/\/+$/, ''));
+        }
+
+        function hostLabel() {
+            return apiBase.replace(/^https?:\/\//, '');
+        }
+
+        function setHostStatus(state) {
+            const el = document.getElementById('ip-display');
+            if (!el) return;
+            if (state === 'offline') {
+                el.innerText = 'OFFLINE';
+                el.style.color = 'var(--alert-red)';
+            } else if (state === 'backup') {
+                el.innerText = 'BACKUP ' + hostLabel().toUpperCase();
+                el.style.color = 'var(--modifier-yellow)';
+            } else {
+                el.innerText = 'PRIMARY';
+                el.style.color = 'var(--primary-green)';
+            }
+        }
+
+        async function probeHost(url) {
+            const u = (url || '').replace(/\/+$/, '');
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 3500);
+            try {
+                const res = await fetch(u + '/api/hosts', { signal: controller.signal });
+                clearTimeout(t);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                clearTimeout(t);
+                return null;
+            }
+        }
+
+        function candidateHosts() {
+            return knownHosts
+                .filter(h => h.url !== apiBase)
+                .sort((a, b) => (a.role === 'primary' ? -1 : 0) - (b.role === 'primary' ? -1 : 0));
+        }
+
+        async function tryFailover() {
+            if (failoverLock) return false;
+            failoverLock = true;
+            try {
+                for (const h of candidateHosts()) {
+                    const info = await probeHost(h.url);
+                    if (info) {
+                        mergeHosts(info.hosts || []);
+                        apiBase = h.url;
+                        onHostSwitched();
+                        return true;
+                    }
+                }
+                return false;
+            } finally {
+                failoverLock = false;
+            }
+        }
+
+        function closeSocketForSwitch() {
+            if (socket) {
+                socket.onclose = null;
+                socket.onerror = null;
+                try { socket.close(); } catch (e) {}
+            }
+        }
+
+        function onHostSwitched() {
+            closeSocketForSwitch();
+            connect();
+        }
+
+        // Periodic health check of the current host. Re-syncs the order queue
+        // and switches back to the primary once it comes back online.
+        async function watchdogTick() {
+            if (failoverLock) return;
+            const info = await probeHost(apiBase);
+            if (info) {
+                const prevRole = hostEntryFor(apiBase)?.role;
+                mergeHosts(info.hosts || []);
+                const curRole = hostEntryFor(apiBase)?.role || 'unknown';
+                setHostStatus(curRole === 'primary' ? 'primary' : 'backup');
+                const primary = knownHosts.find(h => h.role === 'primary');
+                if (primary && primary.url !== apiBase && prevRole === 'backup') {
+                    const pInfo = await probeHost(primary.url);
+                    if (pInfo) {
+                        mergeHosts(pInfo.hosts || []);
+                        apiBase = primary.url;
+                        onHostSwitched();
+                    }
+                }
+                return;
+            }
+            setHostStatus('offline');
+            await tryFailover();
+        }
+
+        async function fetchOrders() {
+            try {
+                const res = await fetch(hostBase() + '/api/orders');
+                if (res.ok) {
+                    orders = await res.json();
+                    renderQueue();
+                }
+            } catch (e) {
+                await tryFailover();
+            }
+        }
+
         function applySettings() {
             document.body.className = currentTheme === 'dark' ? '' : currentTheme;
             document.documentElement.style.setProperty('--scale', currentScale);
@@ -358,7 +541,9 @@
             document.getElementById('queue').style.display = 'flex';
             applySettings();
             playNotification();
+            setHostStatus(hostEntryFor(apiBase)?.role === 'backup' ? 'backup' : 'primary');
             connect();
+            setInterval(watchdogTick, 10000);
         }
 
         function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
@@ -421,17 +606,23 @@
             }
         }
 
+        function wsUrl() {
+            const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            return hostBase().replace(/^http/, scheme) + '/ws';
+        }
+
         function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            socket = new WebSocket(wsUrl);
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+            socket = new WebSocket(wsUrl());
             socket.onopen = () => {
+                setHostStatus(hostEntryFor(apiBase)?.role === 'backup' ? 'backup' : 'primary');
                 socket.send(JSON.stringify({
                     type: 'RegisterClient',
                     id: clientId,
                     deviceName: 'Web Display',
                     station: currentStation
                 }));
+                fetchOrders();
             };
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -467,7 +658,10 @@
                     renderQueue();
                 }
             };
-            socket.onclose = () => { setTimeout(connect, 3000); };
+            socket.onerror = () => { try { socket.close(); } catch (e) {} };
+            socket.onclose = () => setTimeout(async () => {
+                if (!(await tryFailover())) connect();
+            }, 3000);
         }
 
         function toggleItem(orderUuid, itemUuid) {

@@ -13,6 +13,7 @@ import '../../providers/service_providers.dart';
 import '../../providers/client_state_provider.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/discovery_service.dart';
 
 class ClientHome extends ConsumerStatefulWidget {
   const ClientHome({super.key});
@@ -25,6 +26,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   bool _isConnected = false;
   StreamSubscription? _wsSubscription;
   StreamSubscription? _discoverySub;
+  final Map<String, DiscoveredHost> _knownHosts = {};
   String _deviceIp = '...';
   final _audioPlayer = AudioPlayer();
   late ConfettiController _confettiController;

@@ -50,6 +50,8 @@
 
         .header-left { display: flex; align-items: center; gap: 12px; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--success); }
+        .status-dot.backup { background-color: #7C3AED; }
+        .status-dot.offline { background-color: var(--danger); }
         .header-title { font-weight: 900; letter-spacing: 1.5px; font-size: 13px; }
         #clock { font-weight: 900; font-family: monospace; font-size: 15px; }
 
@@ -112,6 +114,7 @@
             gap: 12px;
         }
         .item-card {
+            position: relative;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 8px; padding: 12px;
@@ -387,12 +390,76 @@
         }
         body.dark .toast { background: #ffffff; color: #111111; }
         .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+        /* ---- Polish: scrollbars, focus, hover ---- */
+        * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        button:focus-visible, .category-chip:focus-visible, .mod-chip:focus-visible, .backup-tile:focus-visible {
+            outline: 2px solid var(--accent); outline-offset: 2px;
+        }
+        .search-box:focus, .order-customer:focus, .modal input:focus, .modal select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .search-box, .order-customer, .modal input, .modal select, .qty-btn, .btn-black, .btn-outline,
+        .icon-btn, .sub-tab, .stepper-btn, .list-row, .stock-row, .mod-chip, .category-chip {
+            transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+
+        .item-card:hover { border-color: var(--text-secondary); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+        .item-card:active { transform: scale(0.97); }
+        .category-chip:hover { border-color: var(--text-secondary); }
+        .qty-btn:hover { border-color: var(--text-secondary); background: var(--bg); }
+        .qty-btn.warn:hover { color: var(--danger); border-color: var(--danger); }
+        .qty-btn.muted:hover { filter: brightness(1.1); }
+        .btn-black:hover, .btn-action:not(:disabled):hover, #complete-btn:not(:disabled):hover { filter: brightness(1.12); }
+        .btn-black:active, .btn-action:not(:disabled):active, #complete-btn:not(:disabled):active { transform: scale(0.98); }
+        .btn-outline:hover { border-color: var(--text-secondary); background: var(--bg); }
+        .mod-chip:hover { border-color: var(--text-secondary); }
+        .cart-row:hover { background: var(--bg); }
+        .list-row:hover { border-color: var(--text-secondary); }
+        .stock-row:hover { border-color: var(--text-secondary); }
+        .nav-item:hover { color: var(--text-primary); }
+        .icon-btn:hover { background: var(--bg); opacity: 1; }
+        .back-btn:hover { border-color: var(--text-secondary); background: var(--surface); }
+        .stepper-btn:hover { background: var(--bg); }
+        .backup-tile:hover { border-color: var(--text-secondary); background: var(--bg); }
+        .sub-tab:hover { color: var(--text-primary); }
+
+        body.dark .tag.stock { background: rgba(217, 119, 6, 0.15); color: #FDBA74; }
+        body.dark .item-card:hover, body.dark .list-row:hover, body.dark .stock-row:hover { box-shadow: none; }
+
+        .empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; padding: 56px 16px;
+            color: var(--text-secondary); font-weight: 700; letter-spacing: 0.3px; font-size: 13px;
+        }
+        .empty::before {
+            content: ""; width: 48px; height: 48px; border-radius: 50%;
+            background: var(--border); opacity: 0.5;
+        }
+
+        .quick-add {
+            position: absolute; top: 8px; right: 8px;
+            width: 26px; height: 26px; border-radius: 50%;
+            background: var(--success); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            transition: transform 0.15s, filter 0.15s;
+        }
+        .quick-add:hover { filter: brightness(1.1); transform: scale(1.08); }
+        .quick-add svg { width: 14px; height: 14px; }
     </style>
 </head>
 <body>
     <header>
         <div class="header-left">
-            <div class="status-dot"></div>
+            <div class="status-dot" id="status-dot" title=""></div>
             <div class="header-title" id="header-title">TERMINAL</div>
         </div>
         <div id="clock">00:00:00</div>
@@ -781,6 +848,12 @@
         let clock24 = localStorage.getItem('web_clock24') === '1';
         let stockTargetId = null;
 
+        // ---------- Host failover ----------
+        const HOSTS_KEY = 'dartkds_hosts';
+        let apiBase = window.location.origin.replace(/\/+$/, '');
+        let knownHosts = loadHosts();
+        let failoverLock = false;
+
         // ---------- Helpers ----------
         function esc(s) {
             return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -790,16 +863,155 @@
             return String(t || '').split(',').map(s => s.trim()).filter(Boolean);
         }
 
+        function hostBase() {
+            return apiBase;
+        }
+
         async function api(url, opts) {
-            const res = await fetch(url, Object.assign({
-                headers: { 'Content-Type': 'application/json' }
-            }, opts || {}));
+            let res;
+            try {
+                res = await fetch(hostBase() + url, Object.assign({
+                    headers: { 'Content-Type': 'application/json' }
+                }, opts || {}));
+            } catch (e) {
+                await tryFailover();
+                throw new Error('Connection lost to host');
+            }
             if (!res.ok) {
                 let msg = res.statusText;
                 try { msg = await res.text(); } catch (e) {}
                 throw new Error(msg || 'Request failed');
             }
             return res.json();
+        }
+
+        // ---------- Host discovery & failover ----------
+        function loadHosts() {
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem(HOSTS_KEY) || '[]'); } catch (e) { list = []; }
+            for (const h of list) h.url = (h.url || '').replace(/\/+$/, '');
+            const self = { url: window.location.origin.replace(/\/+$/, ''), hostId: '', role: 'unknown', self: true };
+            if (!list.some(h => h.url === self.url)) list.unshift(self);
+            return list;
+        }
+
+        function saveHosts() {
+            try { localStorage.setItem(HOSTS_KEY, JSON.stringify(knownHosts)); } catch (e) {}
+        }
+
+        function mergeHosts(hostList) {
+            (hostList || []).forEach(h => {
+                const url = (h.url || '').replace(/\/+$/, '');
+                if (!url) return;
+                const existing = knownHosts.find(x => x.url === url);
+                if (existing) {
+                    existing.role = h.role || existing.role;
+                    existing.hostId = h.hostId || existing.hostId;
+                } else {
+                    knownHosts.push({ url, role: h.role || 'unknown', hostId: h.hostId || '', self: false });
+                }
+            });
+            saveHosts();
+        }
+
+        function hostEntryFor(url) {
+            return knownHosts.find(h => h.url === (url || '').replace(/\/+$/, ''));
+        }
+
+        function hostLabel() {
+            return apiBase.replace(/^https?:\/\//, '');
+        }
+
+        function setHostStatus(state) {
+            const dot = document.getElementById('status-dot');
+            if (!dot) return;
+            dot.classList.remove('backup', 'offline');
+            if (state === 'backup' || state === 'offline') dot.classList.add(state);
+            dot.title = state === 'offline'
+                ? 'HOST OFFLINE'
+                : (state === 'backup' ? 'BACKUP HOST ' : 'HOST ') + hostLabel().toUpperCase();
+        }
+
+        async function probeHost(url) {
+            const u = (url || '').replace(/\/+$/, '');
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 3500);
+            try {
+                const res = await fetch(u + '/api/hosts', { signal: controller.signal });
+                clearTimeout(t);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                clearTimeout(t);
+                return null;
+            }
+        }
+
+        function candidateHosts() {
+            return knownHosts
+                .filter(h => h.url !== apiBase)
+                .sort((a, b) => (a.role === 'primary' ? -1 : 0) - (b.role === 'primary' ? -1 : 0));
+        }
+
+        // Switch to the next reachable host when the current one dies.
+        async function tryFailover() {
+            if (failoverLock) return false;
+            failoverLock = true;
+            try {
+                for (const h of candidateHosts()) {
+                    const info = await probeHost(h.url);
+                    if (info) {
+                        mergeHosts(info.hosts || []);
+                        apiBase = h.url;
+                        onHostSwitched();
+                        return true;
+                    }
+                }
+                return false;
+            } finally {
+                failoverLock = false;
+            }
+        }
+
+        // Reconnect + refresh after switching hosts.
+        function closeSocketForSwitch() {
+            if (socket) {
+                socket.onclose = null;
+                socket.onerror = null;
+                try { socket.close(); } catch (e) {}
+            }
+        }
+
+        function onHostSwitched() {
+            closeSocketForSwitch();
+            connect();
+            refreshMenu();
+            toast('Switched to ' + hostLabel().toUpperCase(), '#7C3AED');
+        }
+
+        // Periodic health check of the current host. Switches back to the
+        // primary once it comes back online.
+        async function watchdogTick() {
+            if (failoverLock) return;
+            const info = await probeHost(apiBase);
+            if (info) {
+                const prevRole = hostEntryFor(apiBase)?.role;
+                mergeHosts(info.hosts || []);
+                const curRole = hostEntryFor(apiBase)?.role || 'unknown';
+                setHostStatus(curRole === 'primary' ? 'primary' : 'backup');
+                const primary = knownHosts.find(h => h.role === 'primary');
+                if (primary && primary.url !== apiBase && prevRole === 'backup') {
+                    const pInfo = await probeHost(primary.url);
+                    if (pInfo) {
+                        mergeHosts(pInfo.hosts || []);
+                        apiBase = primary.url;
+                        onHostSwitched();
+                    }
+                }
+                return;
+            }
+            setHostStatus('offline');
+            await tryFailover();
         }
 
         function toast(msg, color) {
@@ -915,8 +1127,12 @@
 
             grid.innerHTML = filtered.map(i => {
                 const isOut = i.trackStock && i.stockQuantity <= 0;
+                const isSimple = !i.modifiers && !(i.requiredModifiers || []).length;
                 return `
                     <div class="item-card ${isOut ? 'out' : ''}" onclick="${isOut ? '' : `openModDialog(${i.id})`}">
+                        ${isSimple && !isOut ? `<div class="quick-add" onclick="event.stopPropagation(); quickAdd(${i.id})" title="Quick add">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </div>` : ''}
                         <div class="item-name">${esc((i.name || '').toUpperCase())}</div>
                         <div class="item-footer">
                             <div class="item-stock">${i.trackStock ? `QTY: ${i.stockQuantity}` : ''}</div>
@@ -925,6 +1141,14 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function quickAdd(id) {
+            const i = menu.find(x => x.id === id);
+            if (!i) return;
+            cart.push({ item: i, qty: 1, mods: [] });
+            renderCart();
+            toast((i.name || 'Item').toUpperCase() + ' ADDED', '#22C55E');
         }
 
         // ---------- Modifier Dialog ----------
@@ -1007,9 +1231,14 @@
             renderCart();
         }
 
+        function wsUrl() {
+            const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            return hostBase().replace(/^http/, scheme) + '/ws';
+        }
+
         function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+            socket = new WebSocket(wsUrl());
             socket.onopen = () => {
                 socket.send(JSON.stringify({
                     type: 'RegisterClient',
@@ -1018,10 +1247,18 @@
                     station: 'HOST'
                 }));
             };
-            socket.onclose = () => setTimeout(connect, 3000);
+            socket.onerror = () => { try { socket.close(); } catch (e) {} };
+            socket.onclose = () => setTimeout(async () => {
+                if (!(await tryFailover())) connect();
+            }, 3000);
         }
 
         function sendOrder() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                toast('Connection lost', '#DC2626');
+                tryFailover();
+                return;
+            }
             const customerName = document.getElementById('customer-name').value.trim() || 'Guest';
             const orderPayload = {
                 type: 'CreateOrder',
@@ -1360,7 +1597,7 @@
         // ---------- Backup ----------
         async function exportLibrary() {
             try {
-                const res = await fetch('/api/library/export');
+                const res = await fetch(hostBase() + '/api/library/export');
                 const text = await res.text();
                 const blob = new Blob([text], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -1490,8 +1727,10 @@
             updateClock();
             setInterval(updateClock, 1000);
             renderCart();
+            setHostStatus(hostEntryFor(apiBase)?.role === 'backup' ? 'backup' : 'primary');
             await refreshMenu();
             connect();
+            setInterval(watchdogTick, 10000);
         }
 
         init();
