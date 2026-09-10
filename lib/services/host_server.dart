@@ -66,8 +66,10 @@ class HostServer {
       final name = (body['name'] ?? '').toString().trim();
       if (name.isEmpty) return Response.badRequest(body: 'Name required');
 
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
       final station = await _fallbackStationName((body['defaultStation'] ?? '').toString());
       final id = await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
+        guid: drift.Value(const Uuid().v4()),
         name: name,
         category: (body['category'] ?? 'All Items').toString(),
         defaultStation: station,
@@ -77,6 +79,7 @@ class HostServer {
         price: drift.Value((body['price'] as num?)?.toDouble() ?? 0.0),
         stockQuantity: drift.Value((body['stockQuantity'] as num?)?.toInt() ?? 0),
         trackStock: drift.Value(body['trackStock'] as bool? ?? false),
+        updatedAtMs: drift.Value(nowMs),
       ));
       return Response.ok(jsonEncode({'id': id}), headers: {'Content-Type': 'application/json'});
     });
@@ -104,6 +107,7 @@ class HostServer {
         price: drift.Value(body['price'] != null ? (body['price'] as num).toDouble() : existing.price),
         stockQuantity: drift.Value(body['stockQuantity'] != null ? (body['stockQuantity'] as num).toInt() : existing.stockQuantity),
         trackStock: drift.Value(body['trackStock'] != null ? (body['trackStock'] as bool) : existing.trackStock),
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
       ));
       return Response.ok(jsonEncode({'id': menuId}), headers: {'Content-Type': 'application/json'});
     });
@@ -127,7 +131,10 @@ class HostServer {
 
       final raw = (body?['quantity'] as num?)?.toInt();
       final newQty = (raw == null || raw < 0) ? existing.stockQuantity : raw;
-      await (db.update(db.menuItems)..where((t) => t.id.equals(menuId))).write(MenuItemsCompanion(stockQuantity: drift.Value(newQty)));
+      await (db.update(db.menuItems)..where((t) => t.id.equals(menuId))).write(MenuItemsCompanion(
+        stockQuantity: drift.Value(newQty),
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+      ));
       return Response.ok(jsonEncode({'id': existing.id, 'stockQuantity': newQty}), headers: {'Content-Type': 'application/json'});
     });
 
@@ -143,7 +150,10 @@ class HostServer {
       final body = await _jsonBody(request);
       final name = (body?['name'] ?? '').toString().trim();
       if (name.isEmpty) return Response.badRequest(body: 'Name required');
-      final id = await db.into(db.stations).insert(StationsCompanion.insert(name: name));
+      final id = await db.into(db.stations).insert(StationsCompanion.insert(
+        name: name,
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+      ));
       return Response.ok(jsonEncode({'id': id}), headers: {'Content-Type': 'application/json'});
     });
 
@@ -155,7 +165,10 @@ class HostServer {
       final body = await _jsonBody(request);
       final name = (body?['name'] ?? '').toString().trim();
       if (name.isEmpty) return Response.badRequest(body: 'Name required');
-      await (db.update(db.stations)..where((t) => t.id.equals(stationId))).write(StationsCompanion(name: drift.Value(name)));
+      await (db.update(db.stations)..where((t) => t.id.equals(stationId))).write(StationsCompanion(
+        name: drift.Value(name),
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+      ));
       return Response.ok('{}', headers: {'Content-Type': 'application/json'});
     });
 
@@ -179,7 +192,10 @@ class HostServer {
       final body = await _jsonBody(request);
       final name = (body?['name'] ?? '').toString().trim();
       if (name.isEmpty) return Response.badRequest(body: 'Name required');
-      final id = await db.into(db.globalModifiers).insert(GlobalModifiersCompanion.insert(name: name));
+      final id = await db.into(db.globalModifiers).insert(GlobalModifiersCompanion.insert(
+        name: name,
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+      ));
       return Response.ok(jsonEncode({'id': id}), headers: {'Content-Type': 'application/json'});
     });
 
@@ -262,14 +278,22 @@ class HostServer {
       if (body == null) return Response.badRequest(body: 'Invalid JSON');
       try {
         await db.transaction(() async {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
           for (final s in (body['stations'] as List? ?? [])) {
-            await db.into(db.stations).insertOnConflictUpdate(StationsCompanion.insert(name: s['name'].toString()));
+            await db.into(db.stations).insertOnConflictUpdate(StationsCompanion.insert(
+              name: s['name'].toString(),
+              updatedAtMs: drift.Value(nowMs),
+            ));
           }
           for (final m in (body['globalModifiers'] as List? ?? [])) {
-            await db.into(db.globalModifiers).insertOnConflictUpdate(GlobalModifiersCompanion.insert(name: m['name'].toString()));
+            await db.into(db.globalModifiers).insertOnConflictUpdate(GlobalModifiersCompanion.insert(
+              name: m['name'].toString(),
+              updatedAtMs: drift.Value(nowMs),
+            ));
           }
           for (final i in (body['menuItems'] as List? ?? [])) {
             await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
+              guid: drift.Value(const Uuid().v4()),
               name: i['name'].toString(),
               category: (i['category'] ?? 'All Items').toString(),
               defaultStation: await _fallbackStationName((i['defaultStation'] ?? '').toString()),
@@ -279,6 +303,7 @@ class HostServer {
               price: drift.Value((i['price'] as num?)?.toDouble() ?? 0.0),
               stockQuantity: drift.Value((i['stockQuantity'] as num?)?.toInt() ?? 0),
               trackStock: drift.Value(i['trackStock'] as bool? ?? false),
+              updatedAtMs: drift.Value(nowMs),
             ));
           }
         });
@@ -319,6 +344,7 @@ class HostServer {
               customerName: orderData['customerName'] ?? 'Guest',
               timestamp: timestamp,
               status: OrderStatus.pending,
+              updatedAtMs: DateTime.now().millisecondsSinceEpoch,
             ));
 
             final List<Map<String, dynamic>> jsonItems = [];
@@ -329,7 +355,10 @@ class HostServer {
               final menuMatches = await (_db!.select(_db!.menuItems)..where((t) => t.name.equals(item['name']))).get();
               if (menuMatches.isNotEmpty && menuMatches.first.trackStock) {
                 await (_db!.update(_db!.menuItems)..where((t) => t.id.equals(menuMatches.first.id))).write(
-                  MenuItemsCompanion(stockQuantity: drift.Value(menuMatches.first.stockQuantity - 1)),
+                  MenuItemsCompanion(
+                    stockQuantity: drift.Value(menuMatches.first.stockQuantity - 1),
+                    updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+                  ),
                 );
               }
 
@@ -341,6 +370,7 @@ class HostServer {
                 stationTag: item['stationTag'] ?? 'GENERAL',
                 status: ItemStatus.pending,
                 price: drift.Value(item['price']?.toDouble() ?? 0.0),
+                updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
               ));
 
               jsonItems.add({

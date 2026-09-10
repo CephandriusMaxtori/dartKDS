@@ -204,7 +204,10 @@ class InventoryView extends ConsumerWidget {
 
   void _updateStock(KDSDatabase db, MenuItemData item, int newQuantity) async {
     if (newQuantity < 0) newQuantity = 0;
-    await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(stockQuantity: drift.Value(newQuantity)));
+    await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(
+      stockQuantity: drift.Value(newQuantity),
+      updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+    ));
   }
 
   void _exportShoppingList(BuildContext context, KDSDatabase db) async {

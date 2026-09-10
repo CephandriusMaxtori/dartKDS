@@ -164,6 +164,7 @@ class SentQueueView extends ConsumerWidget {
         (m) => m.name == item.name,
         orElse: () => MenuItemData(
           id: -1,
+          guid: '',
           name: item.name,
           category: 'History',
           defaultStation: item.stationTag,
@@ -173,6 +174,7 @@ class SentQueueView extends ConsumerWidget {
           tags: [],
           stockQuantity: 0,
           trackStock: false,
+          updatedAtMs: 0,
         ),
       );
       intakeItems.add(IntakeItem(

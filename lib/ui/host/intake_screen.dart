@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:uuid/uuid.dart';
 import '../../models/database.dart';
 import '../../models/order_status.dart';
@@ -432,6 +433,7 @@ class _IntakeScreenState extends ConsumerState<IntakeScreen> {
       customerName: state.customerName.isEmpty ? 'Guest' : state.customerName,
       timestamp: timestamp,
       status: OrderStatus.pending,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     ));
 
     final List<Map<String, dynamic>> jsonItems = [];
@@ -445,6 +447,7 @@ class _IntakeScreenState extends ConsumerState<IntakeScreen> {
         modifiers: item.selectedModifiers,
         stationTag: item.menuItem.defaultStation,
         status: ItemStatus.pending,
+        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
       ));
 
       jsonItems.add({

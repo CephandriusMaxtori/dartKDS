@@ -39,7 +39,7 @@ dependencies:
   shelf_web_socket: ^2.0.0
   web_socket_channel: ^2.4.0
   nsd: ^5.0.1
-  drift: ^2.20.0
+  drift: ^2.35.0
   sqlite3_flutter_libs: ^0.5.24
   path_provider: ^2.1.2
   path: ^1.9.0
@@ -64,7 +64,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  drift_dev: ^2.20.0
+  drift_dev: ^2.35.0
   build_runner: ^2.4.13
   json_serializable: ^6.8.0
   flutter_launcher_icons: ^0.13.1

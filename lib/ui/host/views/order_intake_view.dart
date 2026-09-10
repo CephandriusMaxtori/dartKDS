@@ -539,7 +539,10 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         final menuMatches = await (db.select(db.menuItems)..where((t) => t.name.equals(oldItem.name))).get();
         if (menuMatches.isNotEmpty && menuMatches.first.trackStock) {
           await (db.update(db.menuItems)..where((t) => t.id.equals(menuMatches.first.id))).write(
-            MenuItemsCompanion(stockQuantity: drift.Value(menuMatches.first.stockQuantity + 1)),
+            MenuItemsCompanion(
+              stockQuantity: drift.Value(menuMatches.first.stockQuantity + 1),
+              updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+            ),
           );
         }
       }
@@ -551,6 +554,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           customerName: drift.Value(state.customerName.isEmpty ? 'Guest' : state.customerName),
           timestamp: drift.Value(timestamp),
           status: const drift.Value(OrderStatus.pending),
+          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
         ),
       );
     } else {
@@ -559,6 +563,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         customerName: state.customerName.isEmpty ? 'Guest' : state.customerName,
         timestamp: timestamp,
         status: OrderStatus.pending,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       ));
     }
 
@@ -568,7 +573,10 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         // Re-fetch to get latest stock after restoration (if any)
         final fresh = await (db.select(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).getSingle();
         await (db.update(db.menuItems)..where((t) => t.id.equals(item.menuItem.id))).write(
-          MenuItemsCompanion(stockQuantity: drift.Value(fresh.stockQuantity - item.quantity)),
+          MenuItemsCompanion(
+            stockQuantity: drift.Value(fresh.stockQuantity - item.quantity),
+            updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+          ),
         );
       }
       for (int i = 0; i < item.quantity; i++) {
@@ -581,6 +589,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           stationTag: item.menuItem.defaultStation,
           status: ItemStatus.pending,
           price: drift.Value(item.menuItem.price),
+          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
         ));
         jsonItems.add({
           'uuid': itemUuid,

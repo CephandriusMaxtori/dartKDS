@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:io';
 import '../../../models/database.dart';
 import '../../../providers/service_providers.dart';
@@ -168,6 +169,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             final reqs = _requiredModifiersController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                             final tags = _tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                             await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
+                                  guid: drift.Value(const Uuid().v4()),
                                   name: _nameController.text,
                                   category: 'All Items',
                                   defaultStation: _selectedStation!,
@@ -177,6 +179,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                   price: drift.Value(double.tryParse(_priceController.text) ?? 0.0),
                                   stockQuantity: drift.Value(int.tryParse(_stockController.text) ?? 0),
                                   trackStock: drift.Value(_trackStock),
+                                  updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
                                 ));
                             _nameController.clear();
                             _modifiersController.clear();
@@ -332,7 +335,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF111111), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: const EdgeInsets.symmetric(vertical: 16)),
                     onPressed: () async {
                       if (_stationController.text.isNotEmpty) {
-                        await db.into(db.stations).insert(StationsCompanion.insert(name: _stationController.text.trim()));
+                        await db.into(db.stations).insert(StationsCompanion.insert(
+                          name: _stationController.text.trim(),
+                          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+                        ));
                         _stationController.clear();
                       }
                     },
@@ -401,7 +407,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF111111), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: const EdgeInsets.symmetric(vertical: 16)),
                   onPressed: () async {
                     if (_globalModifierController.text.isNotEmpty) {
-                      await db.into(db.globalModifiers).insert(GlobalModifiersCompanion.insert(name: _globalModifierController.text.trim()));
+                      await db.into(db.globalModifiers).insert(GlobalModifiersCompanion.insert(
+                        name: _globalModifierController.text.trim(),
+                        updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+                      ));
                       _globalModifierController.clear();
                     }
                   },
@@ -513,9 +522,18 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       if (result != null && result.files.single.path != null) {
         final data = jsonDecode(await File(result.files.single.path!).readAsString());
         await db.transaction(() async {
-          for (var s in data['stations']) await db.into(db.stations).insertOnConflictUpdate(StationsCompanion.insert(name: s['name']));
-          for (var m in data['globalModifiers']) await db.into(db.globalModifiers).insertOnConflictUpdate(GlobalModifiersCompanion.insert(name: m['name']));
-          for (var i in data['menuItems']) await db.into(db.menuItems).insert(MenuItemsCompanion.insert(name: i['name'], category: i['category'], defaultStation: i['defaultStation'], modifiers: List<String>.from(i['modifiers']), requiredModifiers: drift.Value(i['requiredModifiers'] != null ? List<String>.from(i['requiredModifiers']) : <String>[]), tags: drift.Value(i['tags'] != null ? List<String>.from(i['tags']) : <String>[]), price: drift.Value(i['price'] ?? 0.0), stockQuantity: drift.Value(i['stockQuantity'] ?? 0), trackStock: drift.Value(i['trackStock'] ?? false)));
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          for (var s in data['stations']) await db.into(db.stations).insertOnConflictUpdate(StationsCompanion.insert(
+            name: s['name'],
+            updatedAtMs: drift.Value(nowMs),
+          ));
+          for (var m in data['globalModifiers']) await db.into(db.globalModifiers).insertOnConflictUpdate(GlobalModifiersCompanion.insert(
+            name: m['name'],
+            updatedAtMs: drift.Value(nowMs),
+          ));
+          for (var i in data['menuItems']) await db.into(db.menuItems).insert(MenuItemsCompanion.insert(
+            guid: drift.Value(const Uuid().v4()),
+            name: i['name'], category: i['category'], defaultStation: i['defaultStation'], modifiers: List<String>.from(i['modifiers']), requiredModifiers: drift.Value(i['requiredModifiers'] != null ? List<String>.from(i['requiredModifiers']) : <String>[]), tags: drift.Value(i['tags'] != null ? List<String>.from(i['tags']) : <String>[]), price: drift.Value(i['price'] ?? 0.0), stockQuantity: drift.Value(i['stockQuantity'] ?? 0), trackStock: drift.Value(i['trackStock'] ?? false), updatedAtMs: drift.Value(nowMs)));
         });
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import Successful')));
       }
@@ -539,7 +557,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF111111), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
             onPressed: () async {
               if (controller.text.isNotEmpty) {
-                await (db.update(db.stations)..where((t) => t.id.equals(station.id))).write(StationsCompanion(name: drift.Value(controller.text.trim())));
+                await (db.update(db.stations)..where((t) => t.id.equals(station.id))).write(StationsCompanion(
+                  name: drift.Value(controller.text.trim()),
+                  updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+                ));
                 if (context.mounted) Navigator.pop(context);
               }
             },
@@ -600,7 +621,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               onPressed: () async {
                 if (nameCtrl.text.isNotEmpty) {
                   final tags = tagsCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), tags: drift.Value(tags), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock)));
+                  await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(name: drift.Value(nameCtrl.text.trim()), defaultStation: drift.Value(selectedStation), modifiers: drift.Value(modCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), requiredModifiers: drift.Value(reqModCtrl.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()), tags: drift.Value(tags), price: drift.Value(double.tryParse(priceCtrl.text) ?? 0.0), stockQuantity: drift.Value(int.tryParse(stockCtrl.text) ?? 0), trackStock: drift.Value(trackStock), updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch)));
                   if (context.mounted) Navigator.pop(context);
                 }
               },

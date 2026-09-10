@@ -16,6 +16,7 @@ class KDSOrders extends Table {
   TextColumn get customerName => text().withLength(min: 1, max: 255)();
   DateTimeColumn get timestamp => dateTime()();
   IntColumn get status => intEnum<OrderStatus>()();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {uuid};
@@ -24,6 +25,7 @@ class KDSOrders extends Table {
 @DataClassName('MenuItemData')
 class MenuItems extends Table {
   IntColumn get id => integer().autoIncrement()();
+  TextColumn get guid => text().withDefault(const Constant(''))();
   TextColumn get name => text().withLength(min: 1, max: 255)();
   TextColumn get category => text().withLength(min: 1, max: 255)();
   TextColumn get defaultStation => text().withLength(min: 1, max: 50)();
@@ -33,18 +35,21 @@ class MenuItems extends Table {
   TextColumn get tags => text().map(const NullableListStringConverter()).nullable()();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))();
   BoolColumn get trackStock => boolean().withDefault(const Constant(false))();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 }
 
 @DataClassName('StationData')
 class Stations extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 50).unique()();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 }
 
 @DataClassName('GlobalModifierData')
 class GlobalModifiers extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 100).unique()();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 }
 
 @DataClassName('KDSItemData')
@@ -57,6 +62,17 @@ class KDSItems extends Table {
   TextColumn get stationTag => text().withLength(min: 1, max: 50)();
   IntColumn get status => intEnum<ItemStatus>()();
   RealColumn get price => real().withDefault(const Constant(0.0))();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
+}
+
+@DataClassName('SyncTombstoneData')
+class SyncTombstones extends Table {
+  TextColumn get sourceTable => text().withLength(min: 1, max: 50)();
+  TextColumn get rowKey => text().withLength(min: 1, max: 255)();
+  IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sourceTable, rowKey};
 }
 
 class ListStringConverter extends TypeConverter<List<String>, String> {
@@ -83,12 +99,12 @@ class NullableListStringConverter extends TypeConverter<List<String>, String?> {
   }
 }
 
-@DriftDatabase(tables: [KDSOrders, KDSItems, MenuItems, Stations, GlobalModifiers])
+@DriftDatabase(tables: [KDSOrders, KDSItems, MenuItems, Stations, GlobalModifiers, SyncTombstones])
 class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 8; // Incremented to 8
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -141,6 +157,29 @@ class KDSDatabase extends _$KDSDatabase {
           } catch (e) {
             // Likely already exists
           }
+        }
+        if (from < 9) {
+          // Version 9: sync infrastructure — updatedAtMs on all tables,
+          // guid on MenuItems, and SyncTombstones table.
+          try {
+            await m.addColumn(kDSOrders, kDSOrders.updatedAtMs);
+          } catch (e) {}
+          try {
+            await m.addColumn(kDSItems, kDSItems.updatedAtMs);
+          } catch (e) {}
+          try {
+            await m.addColumn(menuItems, menuItems.updatedAtMs);
+          } catch (e) {}
+          try {
+            await m.addColumn(menuItems, menuItems.guid);
+          } catch (e) {}
+          try {
+            await m.addColumn(stations, stations.updatedAtMs);
+          } catch (e) {}
+          try {
+            await m.addColumn(globalModifiers, globalModifiers.updatedAtMs);
+          } catch (e) {}
+          await m.createTable(syncTombstones);
         }
       },
     );
