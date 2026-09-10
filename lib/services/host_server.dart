@@ -12,6 +12,7 @@ import '../models/database.dart';
 import '../models/connected_client.dart';
 import '../models/order_status.dart';
 import '../models/item_status.dart';
+import 'sync_engine.dart';
 
 class HostServer {
   final Map<String, WebSocketChannel> _clientChannels = {};
@@ -311,6 +312,30 @@ class HostServer {
       } catch (e) {
         return Response.internalServerError(body: 'Import failed: $e');
       }
+    });
+
+    // ── Sync Endpoints ────────────────────────────────────────
+
+    router.get('/api/sync/changes', (Request request) async {
+      final sinceStr = request.url.queryParameters['since'];
+      final sinceMs = int.tryParse(sinceStr ?? '') ?? 0;
+      final engine = SyncEngine(_db!);
+      final payload = await engine.getChanges(sinceMs);
+      return Response.ok(payload, headers: {'Content-Type': 'application/json'});
+    });
+
+    router.post('/api/sync/apply', (Request request) async {
+      final body = await request.readAsString();
+      if (body.isEmpty) return Response.badRequest(body: 'Empty body');
+      final engine = SyncEngine(_db!);
+      await engine.applyChanges(body);
+      return Response.ok(jsonEncode({'success': true}), headers: {'Content-Type': 'application/json'});
+    });
+
+    router.post('/api/sync/reset', (Request request) async {
+      final engine = SyncEngine(_db!);
+      final snapshot = await engine.getSnapshot();
+      return Response.ok(snapshot, headers: {'Content-Type': 'application/json'});
     });
 
     router.get('/ws', webSocketHandler((WebSocketChannel webSocket) {
