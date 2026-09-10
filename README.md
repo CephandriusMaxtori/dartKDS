@@ -1,4 +1,5 @@
 # OpenKDS (dartKDS)
+[![Build Android APK](https://github.com/CephandriusMaxtori/dartKDS/actions/workflows/build.yml/badge.svg)](https://github.com/CephandriusMaxtori/dartKDS/actions/workflows/build.yml)
 
 An open-source **Kitchen Display System (KDS)** built with Flutter — a self-hosted alternative to paper tickets and commercial KDS hardware for restaurants and kitchens.
 
