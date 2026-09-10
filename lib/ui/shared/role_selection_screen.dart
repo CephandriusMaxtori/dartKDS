@@ -9,6 +9,7 @@ class RoleSelectionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final hostIdentity = ref.watch(hostIdentityProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F8F6), // Warm Neutral Stone
@@ -97,7 +98,64 @@ class RoleSelectionScreen extends ConsumerWidget {
                     final db = ref.read(databaseProvider);
                     await ref.read(hostServerProvider).start(db);
                     await Future.delayed(const Duration(milliseconds: 600));
-                    await ref.read(discoveryServiceProvider).register(8080);
+                    ref.read(hostIdentityProvider.notifier).setRole(HostRole.primary);
+                    final identity = ref.read(hostIdentityProvider);
+                    await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'primary');
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ref.read(deviceRoleProvider.notifier).state =
+                          DeviceRole.host;
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'INIT FAILED: $e',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                          backgroundColor: const Color(0xFF111111),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              // Backup Host Card
+              _buildRoleOption(
+                context: context,
+                title: 'BACKUP HOST',
+                subtitle: 'Failover & Sync Peer',
+                description:
+                    'Syncs all data from the primary host. Takes over if primary goes offline.',
+                icon: Icons.sync_rounded,
+                accentColor: const Color(0xFF7C3AED),
+                onTap: () async {
+                  try {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF111111),
+                          strokeWidth: 3,
+                        ),
+                      ),
+                    );
+
+                    final db = ref.read(databaseProvider);
+                    await ref.read(hostServerProvider).start(db);
+                    await Future.delayed(const Duration(milliseconds: 600));
+                    ref.read(hostIdentityProvider.notifier).setRole(HostRole.backup);
+                    final identity = ref.read(hostIdentityProvider);
+                    await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'backup');
 
                     if (context.mounted) {
                       Navigator.pop(context);

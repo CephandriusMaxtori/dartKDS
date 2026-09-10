@@ -6,7 +6,9 @@ import 'package:nsd/nsd.dart' as nsd;
 class DiscoveredHost {
   final String address;
   final int port;
-  DiscoveredHost(this.address, this.port);
+  final String? hostId;
+  final String? role;
+  DiscoveredHost(this.address, this.port, {this.hostId, this.role});
 }
 
 class DiscoveryService {
@@ -17,11 +19,15 @@ class DiscoveryService {
   nsd.Registration? _registration;
   Timer? _broadcastTimer;
   int _serverPort = 8080;
+  String _hostId = '';
+  String _role = 'primary';
 
-  Future<void> register(int port) async {
+  Future<void> register(int port, {String hostId = '', String role = 'primary'}) async {
     _serverPort = port;
+    _hostId = hostId;
+    _role = role;
     final service = nsd.Service(
-      name: 'KDS_Host_${DateTime.now().millisecondsSinceEpoch % 10000}',
+      name: 'KDS_Host_${hostId.isNotEmpty ? hostId.substring(0, 8) : DateTime.now().millisecondsSinceEpoch % 10000}',
       type: serviceType,
       port: port,
     );
@@ -50,7 +56,12 @@ class DiscoveryService {
     try {
       final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0, reuseAddress: true);
       socket.broadcastEnabled = true;
-      final payload = utf8.encode(jsonEncode({'app': 'dartkds', 'port': _serverPort}));
+      final payload = utf8.encode(jsonEncode({
+        'app': 'dartkds',
+        'port': _serverPort,
+        'hostId': _hostId,
+        'role': _role,
+      }));
 
       final targets = <String>{'255.255.255.255'};
       final interfaces = await NetworkInterface.list(includeLoopback: false);
@@ -123,8 +134,10 @@ class DiscoveryService {
               final msg = jsonDecode(utf8.decode(datagram.data, allowMalformed: true));
               if (msg is Map && msg['app'] == 'dartkds') {
                 final port = (msg['port'] as num?)?.toInt() ?? 8080;
+                final hostId = msg['hostId'] as String?;
+                final role = msg['role'] as String?;
                 print('DEBUG: Broadcast discovery from ${datagram.address.address}:$port');
-                controller.add(DiscoveredHost(datagram.address.address, port));
+                controller.add(DiscoveredHost(datagram.address.address, port, hostId: hostId, role: role));
               }
             } catch (_) {}
           }
