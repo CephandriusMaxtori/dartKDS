@@ -101,6 +101,10 @@ class RoleSelectionScreen extends ConsumerWidget {
                     ref.read(hostIdentityProvider.notifier).setRole(HostRole.primary);
                     final identity = ref.read(hostIdentityProvider);
                     await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'primary');
+                    ref.read(syncServiceProvider).start(
+                      identity.hostId,
+                      ref.read(discoveryServiceProvider).discover(),
+                    );
 
                     if (context.mounted) {
                       Navigator.pop(context);
@@ -156,6 +160,10 @@ class RoleSelectionScreen extends ConsumerWidget {
                     ref.read(hostIdentityProvider.notifier).setRole(HostRole.backup);
                     final identity = ref.read(hostIdentityProvider);
                     await ref.read(discoveryServiceProvider).register(8080, hostId: identity.hostId, role: 'backup');
+                    ref.read(syncServiceProvider).start(
+                      identity.hostId,
+                      ref.read(discoveryServiceProvider).discover(),
+                    );
 
                     if (context.mounted) {
                       Navigator.pop(context);

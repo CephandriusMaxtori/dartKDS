@@ -5,13 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/database.dart';
 import '../providers/app_state_providers.dart';
 import '../providers/service_providers.dart';
+import 'discovery_service.dart';
 import 'sync_engine.dart';
 
 class SyncPeer {
   final String hostId;
-  final String address;
-  final int port;
-  final String role;
+  String address;
+  int port;
+  String role;
   int lastSyncMs;
   String? error;
   SyncPeer({
@@ -43,6 +44,8 @@ class SyncService {
 
   Timer? _pollTimer;
   bool _isRunning = false;
+  String? _selfHostId;
+  StreamSubscription? _discoverySub;
   final Map<String, SyncPeer> _peers = {};
   String? _lastError;
   DateTime? _lastSyncTime;
@@ -56,10 +59,39 @@ class SyncService {
     lastSyncTime: _lastSyncTime,
   );
 
-  void start(String selfHostId, {Duration interval = const Duration(seconds: 10)}) {
+  void start(String selfHostId, Stream<DiscoveredHost> discoveryStream,
+      {Duration interval = const Duration(seconds: 10)}) {
     _isRunning = true;
+    _selfHostId = selfHostId;
+
+    _discoverySub?.cancel();
+    _discoverySub = discoveryStream.listen((host) {
+      if (host.hostId == null || host.hostId!.isEmpty || host.hostId == _selfHostId) {
+        return;
+      }
+      if (host.role != 'primary' && host.role != 'backup') {
+        return;
+      }
+      final peer = _peers[host.hostId!];
+      if (peer == null) {
+        _peers[host.hostId!] = SyncPeer(
+          hostId: host.hostId!,
+          address: host.address,
+          port: host.port,
+          role: host.role ?? 'primary',
+        );
+        _emitStatus();
+      } else if (peer.address != host.address || peer.port != host.port) {
+        peer
+          ..address = host.address
+          ..port = host.port
+          ..role = host.role ?? peer.role;
+        _emitStatus();
+      }
+    }, onError: (_) {});
+
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(interval, (_) => _syncOnce(selfHostId));
+    _pollTimer = Timer.periodic(interval, (_) => _syncOnce());
     _emitStatus();
   }
 
@@ -67,17 +99,10 @@ class SyncService {
     _isRunning = false;
     _pollTimer?.cancel();
     _pollTimer = null;
+    _discoverySub?.cancel();
+    _discoverySub = null;
     _peers.clear();
-    _emitStatus();
-  }
-
-  void addPeer(SyncPeer peer) {
-    _peers[peer.hostId] = peer;
-    _emitStatus();
-  }
-
-  void removePeer(String hostId) {
-    _peers.remove(hostId);
+    _selfHostId = null;
     _emitStatus();
   }
 
@@ -87,15 +112,17 @@ class SyncService {
     }
   }
 
-  Future<void> _syncOnce(String selfHostId) async {
+  Future<void> _syncOnce() async {
     final engine = SyncEngine(db);
     for (final peer in _peers.values.toList()) {
-      if (peer.hostId == selfHostId) continue;
       try {
         // Pull changes from peer
-        final pullUrl = 'http://${peer.address}:${peer.port}/api/sync/changes?since=${peer.lastSyncMs}';
         final pullClient = HttpClient();
-        final pullReq = await pullClient.getUrl(Uri.parse(pullUrl)).timeout(const Duration(seconds: 5));
+        final pullUrl =
+            'http://${peer.address}:${peer.port}/api/sync/changes?since=${peer.lastSyncMs}';
+        final pullReq = await pullClient
+            .getUrl(Uri.parse(pullUrl))
+            .timeout(const Duration(seconds: 5));
         final pullResp = await pullReq.close().timeout(const Duration(seconds: 5));
         final pullBody = await pullResp.transform(utf8.decoder).join();
         pullClient.close(force: true);
@@ -105,10 +132,12 @@ class SyncService {
         }
 
         // Push local changes to peer
+        final pushClient = HttpClient();
         final pushUrl = 'http://${peer.address}:${peer.port}/api/sync/apply';
         final localChanges = await engine.getChanges(peer.lastSyncMs);
-        final pushClient = HttpClient();
-        final pushReq = await pushClient.postUrl(Uri.parse(pushUrl)).timeout(const Duration(seconds: 5));
+        final pushReq = await pushClient
+            .postUrl(Uri.parse(pushUrl))
+            .timeout(const Duration(seconds: 5));
         pushReq.headers.contentType = ContentType.json;
         pushReq.write(localChanges);
         final pushResp = await pushReq.close().timeout(const Duration(seconds: 5));
@@ -130,10 +159,6 @@ class SyncService {
     _statusController.close();
   }
 }
-
-final syncServiceProvider = Provider<SyncService?>((ref) {
-  return null;
-});
 
 final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
   final syncService = ref.watch(syncServiceProvider);
