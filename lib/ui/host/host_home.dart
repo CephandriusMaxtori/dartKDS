@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -20,8 +21,8 @@ class HostHome extends ConsumerStatefulWidget {
 class _HostHomeState extends ConsumerState<HostHome> {
   final List<Widget> _views = [
     const OrderIntakeView(),
+    const SentQueueView(),
     const InventoryView(),
-    const LibraryView(),
     const MoreView(),
   ];
 
@@ -35,7 +36,9 @@ class _HostHomeState extends ConsumerState<HostHome> {
       _knownClientIds = ids;
       return;
     }
-    final newClients = clients.where((c) => !_knownClientIds.contains(c.id)).toList();
+    final newClients = clients
+        .where((c) => !_knownClientIds.contains(c.id))
+        .toList();
     _knownClientIds = ids;
     for (final client in newClients) {
       _showClientConnectedDialog(client);
@@ -58,12 +61,19 @@ class _HostHomeState extends ConsumerState<HostHome> {
             Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: Color(0xFF22C55E),
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 10),
             const Text(
               'NEW CLIENT CONNECTED',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                letterSpacing: 0.5,
+              ),
             ),
           ],
         ),
@@ -81,15 +91,25 @@ class _HostHomeState extends ConsumerState<HostHome> {
               decoration: BoxDecoration(
                 color: const Color(0xFF22C55E).withOpacity(0.12),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.25)),
+                border: Border.all(
+                  color: const Color(0xFF22C55E).withOpacity(0.25),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.tune_rounded, size: 16, color: Color(0xFF15803D)),
+                  const Icon(
+                    Icons.tune_rounded,
+                    size: 16,
+                    color: Color(0xFF15803D),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'STATION: ${client.currentStation.toUpperCase()}',
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ],
               ),
@@ -99,7 +119,13 @@ class _HostHomeState extends ConsumerState<HostHome> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2563EB))),
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF2563EB),
+              ),
+            ),
           ),
         ],
       ),
@@ -113,13 +139,13 @@ class _HostHomeState extends ConsumerState<HostHome> {
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
     final currentIndex = ref.watch(hostTabIndexProvider);
 
-    ref.listen<AsyncValue<List<ConnectedClient>>>(
-      connectedClientsProvider,
-      (previous, next) {
-        if (previous == null || !next.hasValue) return;
-        _onClientsChanged(next.value ?? []);
-      },
-    );
+    ref.listen<AsyncValue<List<ConnectedClient>>>(connectedClientsProvider, (
+      previous,
+      next,
+    ) {
+      if (previous == null || !next.hasValue) return;
+      _onClientsChanged(next.value ?? []);
+    });
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -128,17 +154,57 @@ class _HostHomeState extends ConsumerState<HostHome> {
         title: Row(
           children: [
             Container(
-              width: 8, height: 8,
-              decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF22C55E),
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 12),
             Text(
-              currentIndex == 0 ? 'TERMINAL' : (currentIndex == 1 ? 'STOCK' : (currentIndex == 2 ? 'LIBRARY' : 'SYSTEM')),
+              currentIndex == 0
+                  ? 'TERMINAL'
+                  : (currentIndex == 1
+                        ? 'HISTORY'
+                        : (currentIndex == 2 ? 'STOCK' : 'SYSTEM')),
               style: const TextStyle(letterSpacing: 1.5, fontSize: 13),
             ),
           ],
         ),
         actions: [
+          Row(
+            children: [
+              Text(
+                'RUSH',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  color: ref.watch(rushModeProvider)
+                      ? const Color(0xFFDC2626)
+                      : Colors.grey,
+                ),
+              ),
+              Transform.scale(
+                scale: 0.7,
+                child: Switch(
+                  value: ref.watch(rushModeProvider),
+                  activeColor: const Color(0xFFDC2626),
+                  onChanged: (val) {
+                    ref.read(rushModeProvider.notifier).state = val;
+                    ref
+                        .read(hostServerProvider)
+                        .broadcast(
+                          jsonEncode({
+                            'type': 'RushModeChanged',
+                            'enabled': val,
+                          }),
+                        );
+                  },
+                ),
+              ),
+            ],
+          ),
           Container(
             margin: const EdgeInsets.symmetric(vertical: 14),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -151,7 +217,11 @@ class _HostHomeState extends ConsumerState<HostHome> {
               builder: (context, snapshot) {
                 return Text(
                   DateFormat(timeFormat).format(DateTime.now()),
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontFamily: 'monospace', fontSize: 15),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'monospace',
+                    fontSize: 15,
+                  ),
                 );
               },
             ),
@@ -161,16 +231,35 @@ class _HostHomeState extends ConsumerState<HostHome> {
       body: _views[currentIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: theme.dividerColor, width: 1.5)),
+          border: Border(
+            top: BorderSide(color: theme.dividerColor, width: 1.5),
+          ),
         ),
         child: BottomNavigationBar(
           currentIndex: currentIndex,
-          onTap: (index) => ref.read(hostTabIndexProvider.notifier).state = index,
+          onTap: (index) =>
+              ref.read(hostTabIndexProvider.notifier).state = index,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.apps_outlined, size: 22), activeIcon: Icon(Icons.apps_rounded, size: 22), label: 'ORDER'),
-            BottomNavigationBarItem(icon: Icon(Icons.inventory_2_outlined, size: 22), activeIcon: Icon(Icons.inventory_2_rounded, size: 22), label: 'STOCK'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 22), activeIcon: Icon(Icons.menu_book_rounded, size: 22), label: 'MENU'),
-            BottomNavigationBarItem(icon: Icon(Icons.more_horiz_rounded, size: 22), label: 'MORE'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.apps_outlined, size: 22),
+              activeIcon: Icon(Icons.apps_rounded, size: 22),
+              label: 'ORDER',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history_outlined, size: 22),
+              activeIcon: Icon(Icons.history_rounded, size: 22),
+              label: 'HISTORY',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.inventory_2_outlined, size: 22),
+              activeIcon: Icon(Icons.inventory_2_rounded, size: 22),
+              label: 'STOCK',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined, size: 22),
+              activeIcon: Icon(Icons.settings_rounded, size: 22),
+              label: 'SYSTEM',
+            ),
           ],
         ),
       ),

@@ -11,6 +11,8 @@ import 'item_status.dart';
 part 'database.g.dart';
 
 @DataClassName('KDSOrderData')
+@TableIndex(name: 'order_status', columns: {#status})
+@TableIndex(name: 'order_time', columns: {#timestamp})
 class KDSOrders extends Table {
   TextColumn get uuid => text().withLength(min: 36, max: 36)();
   TextColumn get customerName => text().withLength(min: 1, max: 255)();
@@ -31,8 +33,10 @@ class MenuItems extends Table {
   TextColumn get defaultStation => text().withLength(min: 1, max: 50)();
   TextColumn get modifiers => text().map(const ListStringConverter())();
   RealColumn get price => real().withDefault(const Constant(0.0))();
-  TextColumn get requiredModifiers => text().map(const NullableListStringConverter()).nullable()();
-  TextColumn get tags => text().map(const NullableListStringConverter()).nullable()();
+  TextColumn get requiredModifiers =>
+      text().map(const NullableListStringConverter()).nullable()();
+  TextColumn get tags =>
+      text().map(const NullableListStringConverter()).nullable()();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))();
   BoolColumn get trackStock => boolean().withDefault(const Constant(false))();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
@@ -53,6 +57,8 @@ class GlobalModifiers extends Table {
 }
 
 @DataClassName('KDSItemData')
+@TableIndex(name: 'item_order', columns: {#orderUuid})
+@TableIndex(name: 'item_name', columns: {#name})
 class KDSItems extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get uuid => text().withLength(min: 36, max: 36)();
@@ -81,6 +87,7 @@ class ListStringConverter extends TypeConverter<List<String>, String> {
   List<String> fromSql(String fromDb) {
     return fromDb.split('|').where((s) => s.isNotEmpty).toList();
   }
+
   @override
   String toSql(List<String> value) => value.join('|');
 }
@@ -92,6 +99,7 @@ class NullableListStringConverter extends TypeConverter<List<String>, String?> {
     if (fromDb == null) return [];
     return fromDb.split('|').where((s) => s.isNotEmpty).toList();
   }
+
   @override
   String? toSql(List<String> value) {
     if (value.isEmpty) return null;
@@ -99,12 +107,21 @@ class NullableListStringConverter extends TypeConverter<List<String>, String?> {
   }
 }
 
-@DriftDatabase(tables: [KDSOrders, KDSItems, MenuItems, Stations, GlobalModifiers, SyncTombstones])
+@DriftDatabase(
+  tables: [
+    KDSOrders,
+    KDSItems,
+    MenuItems,
+    Stations,
+    GlobalModifiers,
+    SyncTombstones,
+  ],
+)
 class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -112,12 +129,20 @@ class KDSDatabase extends _$KDSDatabase {
       onCreate: (m) async {
         await m.createAll();
         // Seed default station
-        await into(stations).insert(StationsCompanion.insert(name: 'Main Station'));
-        
+        await into(
+          stations,
+        ).insert(StationsCompanion.insert(name: 'Main Station'));
+
         // Seed some common modifiers
-        await into(globalModifiers).insert(GlobalModifiersCompanion.insert(name: 'No Bun'));
-        await into(globalModifiers).insert(GlobalModifiersCompanion.insert(name: 'No Cheese'));
-        await into(globalModifiers).insert(GlobalModifiersCompanion.insert(name: 'See Cashier'));
+        await into(
+          globalModifiers,
+        ).insert(GlobalModifiersCompanion.insert(name: 'No Bun'));
+        await into(
+          globalModifiers,
+        ).insert(GlobalModifiersCompanion.insert(name: 'No Cheese'));
+        await into(
+          globalModifiers,
+        ).insert(GlobalModifiersCompanion.insert(name: 'See Cashier'));
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -181,9 +206,62 @@ class KDSDatabase extends _$KDSDatabase {
           } catch (e) {}
           await m.createTable(syncTombstones);
         }
+        if (from < 10) {
+          await m.createIndex(
+            Index(
+              'order_status',
+              'CREATE INDEX order_status ON k_d_s_orders (status)',
+            ),
+          );
+          await m.createIndex(
+            Index(
+              'order_time',
+              'CREATE INDEX order_time ON k_d_s_orders (timestamp)',
+            ),
+          );
+          await m.createIndex(
+            Index(
+              'item_order',
+              'CREATE INDEX item_order ON k_d_s_items (order_uuid)',
+            ),
+          );
+          await m.createIndex(
+            Index('item_name', 'CREATE INDEX item_name ON k_d_s_items (name)'),
+          );
+        }
       },
     );
   }
+
+  Stream<List<ItemSalesStat>> getItemSalesStats() {
+    final quantity = kDSItems.id.count();
+    final revenue = kDSItems.price.sum();
+
+    final query = select(kDSItems).addColumns([quantity, revenue]);
+    query.groupBy([kDSItems.name]);
+    query.orderBy([OrderingTerm.desc(revenue)]);
+
+    return query.watch().map((rows) {
+      return rows.map((row) {
+        return ItemSalesStat(
+          name: row.readTable(kDSItems).name,
+          quantity: row.read(quantity) ?? 0,
+          revenue: row.read(revenue) ?? 0.0,
+        );
+      }).toList();
+    });
+  }
+}
+
+class ItemSalesStat {
+  final String name;
+  final int quantity;
+  final double revenue;
+  ItemSalesStat({
+    required this.name,
+    required this.quantity,
+    required this.revenue,
+  });
 }
 
 LazyDatabase _openConnection() {
@@ -193,7 +271,7 @@ LazyDatabase _openConnection() {
       final file = File(p.join(dbFolder.path, 'db.sqlite'));
       return NativeDatabase(file);
     } catch (e) {
-      // If we can't open the DB, we're in trouble. 
+      // If we can't open the DB, we're in trouble.
       // This will at least let the StreamBuilder catch an error.
       throw Exception("Failed to open database: $e");
     }

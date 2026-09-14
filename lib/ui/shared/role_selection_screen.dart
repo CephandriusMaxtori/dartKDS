@@ -142,9 +142,15 @@ class RoleSelectionScreen extends ConsumerWidget {
                         SnackBar(
                           content: Text(
                             'INIT FAILED: $e',
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
                           ),
-                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFDC2626) : const Color(0xFF111111),
+                          backgroundColor:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF111111),
                         ),
                       );
                     }
@@ -221,9 +227,15 @@ class RoleSelectionScreen extends ConsumerWidget {
                         SnackBar(
                           content: Text(
                             'INIT FAILED: $e',
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
                           ),
-                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFDC2626) : const Color(0xFF111111),
+                          backgroundColor:
+                              Theme.of(context).brightness == Brightness.dark
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF111111),
                         ),
                       );
                     }
@@ -249,7 +261,7 @@ class RoleSelectionScreen extends ConsumerWidget {
               const Align(
                 alignment: Alignment.center,
                 child: Text(
-                  'STABLE BUILD v1.0.1',
+                  'STABLE BUILD v1.1.2',
                   style: TextStyle(
                     color: Color(0xFFBBBBBB),
                     fontSize: 9,

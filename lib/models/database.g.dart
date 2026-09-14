@@ -2482,6 +2482,22 @@ abstract class _$KDSDatabase extends GeneratedDatabase {
     this,
   );
   late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
+  late final Index orderStatus = Index(
+    'order_status',
+    'CREATE INDEX order_status ON k_d_s_orders (status)',
+  );
+  late final Index orderTime = Index(
+    'order_time',
+    'CREATE INDEX order_time ON k_d_s_orders (timestamp)',
+  );
+  late final Index itemOrder = Index(
+    'item_order',
+    'CREATE INDEX item_order ON k_d_s_items (order_uuid)',
+  );
+  late final Index itemName = Index(
+    'item_name',
+    'CREATE INDEX item_name ON k_d_s_items (name)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2493,6 +2509,10 @@ abstract class _$KDSDatabase extends GeneratedDatabase {
     stations,
     globalModifiers,
     syncTombstones,
+    orderStatus,
+    orderTime,
+    itemOrder,
+    itemName,
   ];
 }
 

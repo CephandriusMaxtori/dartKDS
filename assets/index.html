@@ -627,7 +627,12 @@
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'OrderCreated' || data.type === 'OrderUpdated') {
-                    playNotification();
+                    const tag = currentStation.toUpperCase();
+                    const shouldNotify = (tag === 'GENERAL' || tag === 'EXPO') ||
+                                       (data.order.items.some(i => i.stationTag.toUpperCase() === tag));
+                    if (shouldNotify) {
+                        playNotification();
+                    }
                     const newOrder = data.order;
 
                     const index = orders.findIndex(o => o.uuid === newOrder.uuid);

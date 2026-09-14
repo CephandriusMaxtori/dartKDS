@@ -12,6 +12,8 @@ class ClientService {
 
   Stream get stream => _channel?.stream ?? const Stream.empty();
 
+  bool get isConnected => _channel != null;
+
   void send(dynamic message) {
     try {
       _channel?.sink.add(message);

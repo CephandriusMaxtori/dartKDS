@@ -27,7 +27,10 @@ class HostIdentityNotifier extends StateNotifier<HostIdentity> {
 
   void setRole(HostRole role) {
     state = HostIdentity(hostId: state.hostId, role: role);
-    prefs.setString('host_role', role == HostRole.backup ? 'backup' : 'primary');
+    prefs.setString(
+      'host_role',
+      role == HostRole.backup ? 'backup' : 'primary',
+    );
   }
 }
 
@@ -39,9 +42,9 @@ class HostIdentity {
 
 final hostIdentityProvider =
     StateNotifierProvider<HostIdentityNotifier, HostIdentity>((ref) {
-  final prefs = ref.watch(sharedPrefsProvider);
-  return HostIdentityNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPrefsProvider);
+      return HostIdentityNotifier(prefs);
+    });
 
 class StationTagNotifier extends StateNotifier<String?> {
   final SharedPreferences prefs;
@@ -61,10 +64,20 @@ class StationTagNotifier extends StateNotifier<String?> {
   }
 }
 
-final stationTagProvider =
-    StateNotifierProvider<StationTagNotifier, String?>((ref) {
+final stationTagProvider = StateNotifierProvider<StationTagNotifier, String?>((
+  ref,
+) {
   final prefs = ref.watch(sharedPrefsProvider);
   return StationTagNotifier(prefs);
 });
 
 final hostTabIndexProvider = StateProvider<int>((ref) => 0);
+final libraryTabIndexProvider = StateProvider<int>((ref) => 0);
+final rushModeProvider = StateProvider<bool>((ref) => false);
+
+final globalPulseProvider = StreamProvider<double>((ref) {
+  return Stream.periodic(const Duration(milliseconds: 50), (count) {
+    final progress = (count % 16) / 16.0;
+    return progress < 0.5 ? progress * 2 : (1.0 - progress) * 2;
+  });
+});
