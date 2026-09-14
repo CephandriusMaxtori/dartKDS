@@ -6,6 +6,7 @@ import 'views/order_intake_view.dart';
 import 'views/library_view.dart';
 import 'views/inventory_view.dart';
 import 'views/more_view.dart';
+import 'views/sent_queue_view.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/service_providers.dart';

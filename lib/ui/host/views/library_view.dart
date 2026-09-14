@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import '../../../models/database.dart';
+import '../../../providers/app_state_providers.dart';
 import '../../../providers/service_providers.dart';
 
 class LibraryView extends ConsumerStatefulWidget {

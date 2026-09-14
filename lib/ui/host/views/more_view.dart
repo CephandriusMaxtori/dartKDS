@@ -6,6 +6,7 @@ import 'settings_view.dart';
 import 'library_view.dart';
 import 'analytics_view.dart';
 import '../../../providers/app_state_providers.dart';
+import '../../../providers/service_providers.dart';
 
 class MoreView extends ConsumerWidget {
   const MoreView({super.key});
