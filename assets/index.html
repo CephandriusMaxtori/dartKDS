@@ -16,6 +16,7 @@
             --text-secondary: #6B7280;
             --accent-blue: #2563EB;
             --scale: 1;
+            --ticket-width: 340px;
         }
 
         body.light-mode {
@@ -65,15 +66,37 @@
 
         #clock { font-family: monospace; font-size: 24px; font-weight: bold; flex: 1; text-align: center; }
 
-        .header-right { display: flex; align-items: center; gap: 20px; flex: 1; justify-content: flex-end; }
+        .header-right { display: flex; align-items: center; gap: 12px; flex: 1; justify-content: flex-end; }
 
         .settings-btn {
             background: none; border: none; color: var(--text-primary);
             cursor: pointer; padding: 8px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             transition: background 0.2s;
+            position: relative;
         }
         .settings-btn:hover { background-color: rgba(255,255,255,0.1); }
+
+        .badge-dot {
+            position: absolute; top: 4px; right: 4px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--alert-red);
+            display: none;
+        }
+        .badge-dot.show { display: block; }
+
+        .rush-banner {
+            display: none;
+            background: var(--alert-red);
+            color: white; font-weight: 900;
+            text-align: center; letter-spacing: 2px;
+            padding: 4px; font-size: 13px;
+        }
+        .rush-banner.show { display: block; animation: rush-flash 1.5s infinite; }
+        @keyframes rush-flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
 
         #queue {
             display: flex; flex-direction: row;
@@ -82,15 +105,16 @@
             align-items: flex-start;
             zoom: var(--scale);
         }
+        #queue.rush-mode { height: calc(100vh - 118px); }
 
         .ticket-card {
-            min-width: 340px; max-width: 340px;
+            min-width: var(--ticket-width); max-width: var(--ticket-width);
             background-color: var(--surface-color);
             border: 3px solid var(--border-color);
             border-radius: 8px; margin-right: 16px;
             display: flex; flex-direction: column;
             max-height: 100%;
-            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, margin 0.4s ease, border-color 0.3s ease;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, margin 0.4s ease, border-color 0.3s ease, min-width 0.3s ease, max-width 0.3s ease;
             transform-origin: top center;
         }
 
@@ -112,6 +136,7 @@
         .ticket-card.fresh { border-color: var(--primary-green); }
         .ticket-card.warning { border-color: var(--modifier-yellow); }
         .ticket-card.overdue { border-color: var(--alert-red); animation: pulse-red 2s infinite; }
+        .ticket-card.late-glow { box-shadow: 0 0 10px 2px rgba(220, 38, 38, 0.3); }
 
         @keyframes pulse-red {
             0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
@@ -125,6 +150,10 @@
             transition: background-color 0.3s ease;
         }
         .ticket-header h2 { margin: 0; font-size: 28px; font-weight: 900; }
+        .ticket-header .customer-name {
+            font-size: 14px; font-weight: 700; opacity: 0.7;
+            margin-top: 2px; text-transform: uppercase;
+        }
 
         .ticket-items { flex: 1; overflow-y: auto; }
 
@@ -172,9 +201,9 @@
         .empty-state {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            text-align: center; opacity: 0.1;
+            text-align: center; opacity: 0.3;
         }
-        .empty-state h1 { font-size: 48px; letter-spacing: 4px; }
+        .empty-state h1 { font-size: 48px; letter-spacing: 6px; }
 
         /* Overlay Styles */
         .overlay {
@@ -230,6 +259,41 @@
 
         .confetti-particle { position: fixed; z-index: 2000; pointer-events: none; }
 
+        /* Broadcast overlay */
+        .broadcast-card {
+            background: var(--alert-red);
+            border: 4px solid white;
+            border-radius: 12px;
+            padding: 32px 40px;
+            text-align: center;
+            max-width: 500px;
+        }
+        .broadcast-card .icon { font-size: 64px; }
+        .broadcast-card h1 { border: none; font-size: 22px; letter-spacing: 1.5px; }
+        .broadcast-card p { font-weight: 800; font-size: 18px; text-transform: uppercase; }
+        .btn-acknowledge {
+            background: white; color: black; border: none;
+            padding: 14px 32px; border-radius: 8px;
+            font-weight: 900; font-size: 15px; letter-spacing: 1px;
+            cursor: pointer; margin-top: 16px;
+        }
+
+        /* Recent bumps dialog */
+        .recent-list { max-height: 320px; overflow-y: auto; text-align: left; }
+        .recent-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 0; border-bottom: 1px solid var(--border-color);
+        }
+        .recent-item .info { display: flex; flex-direction: column; }
+        .recent-item .info b { font-size: 15px; }
+        .recent-item .info span { font-size: 12px; color: var(--text-secondary); }
+        .btn-recall {
+            background: var(--primary-green); color: black; border: none;
+            padding: 8px 16px; border-radius: 6px; font-weight: 900;
+            font-size: 12px; letter-spacing: 0.5px; cursor: pointer;
+        }
+        .empty-recent { color: var(--text-secondary); text-align: center; padding: 24px 0; }
+
         /* ---- Polish: scrollbars, focus, hover ---- */
         * { scrollbar-width: thin; scrollbar-color: var(--border-color) transparent; }
         ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -246,7 +310,7 @@
             outline: none;
         }
 
-        .settings-btn, .item-row, .ticket-footer, .btn-primary, .btn-ghost, .station-badge {
+        .settings-btn, .item-row, .ticket-footer, .btn-primary, .btn-ghost, .station-badge, .btn-recall, .btn-acknowledge {
             transition: background 0.2s, border-color 0.2s, color 0.2s, filter 0.2s;
         }
         .item-row:hover { background: rgba(255, 255, 255, 0.04); }
@@ -255,14 +319,13 @@
         .btn-primary:hover { filter: brightness(1.1); }
         .btn-ghost:hover { background: var(--border-color); }
         .station-badge:hover { filter: brightness(1.08); }
+        .btn-recall:hover { filter: brightness(1.1); }
+        .btn-acknowledge:hover { filter: brightness(0.95); }
 
         body.light-mode .item-row:hover { background: rgba(0, 0, 0, 0.04); }
         body.light-mode .settings-btn:hover { background-color: rgba(0, 0, 0, 0.08); }
         body.light-mode .ticket-card { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
         body.light-mode .modifiers-box { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
-
-        .empty-state { opacity: 0.3; }
-        .empty-state h1 { letter-spacing: 6px; }
     </style>
 </head>
 <body>
@@ -303,6 +366,14 @@
             </div>
 
             <div class="setting-group">
+                <label class="setting-label">Clock Format</label>
+                <select id="clock-format-select" onchange="updateClockFormat(this.value)">
+                    <option value="12">12-Hour</option>
+                    <option value="24">24-Hour</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
                 <label class="setting-label">Current Station</label>
                 <input type="text" id="current-station-input" onchange="updateStation(this.value)">
             </div>
@@ -317,6 +388,25 @@
         </div>
     </div>
 
+    <!-- Kitchen Broadcast Overlay -->
+    <div id="broadcast-overlay" class="overlay" style="display: none;">
+        <div class="broadcast-card">
+            <div class="icon">📢</div>
+            <h1>IMPORTANT NOTIFICATION</h1>
+            <p id="broadcast-message"></p>
+            <button class="btn-acknowledge" onclick="closeBroadcast()">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <!-- Recent Bumps Modal -->
+    <div id="recent-modal" class="overlay" style="display: none;">
+        <div class="modal-card">
+            <h1>RECENT BUMPS</h1>
+            <div class="recent-list" id="recent-list"></div>
+            <button class="btn-ghost" onclick="closeRecentBumps()">CLOSE</button>
+        </div>
+    </div>
+
     <header id="main-header" style="display: none;">
         <div class="header-left">
             <span class="station-badge" id="station-display" onclick="openSettings()">GENERAL</span>
@@ -324,11 +414,17 @@
         </div>
         <div id="clock">00:00:00</div>
         <div class="header-right">
+            <button class="settings-btn" onclick="openRecentBumps()" title="Recall Bumps">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span class="badge-dot" id="recent-badge"></span>
+            </button>
             <button class="settings-btn" onclick="openSettings()">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </button>
         </div>
     </header>
+
+    <div id="rush-banner" class="rush-banner">⚡ RUSH MODE ACTIVE ⚡</div>
 
     <div id="queue" style="display: none;">
         <div class="empty-state">
@@ -338,13 +434,18 @@
 
     <script>
         let orders = [];
+        let recentBumps = []; // {order, finishedAt}
         let socket;
         let currentStation = localStorage.getItem('kds_station') || 'GENERAL';
         let currentScale = localStorage.getItem('kds_scale') || '1.0';
         let currentTheme = localStorage.getItem('kds_theme') || 'dark';
         let currentVolume = localStorage.getItem('kds_volume') || '1.0';
+        let use24Hour = localStorage.getItem('kds_clock_format') === '24';
         let enableConfetti = localStorage.getItem('kds_confetti') !== 'false';
         let clientId = localStorage.getItem('kds_client_id') || 'web-' + Math.random().toString(36).substr(2, 9);
+        let isRushMode = false;
+        let lastHeartbeat = Date.now();
+        let staleWatchdogTimer = null;
 
         localStorage.setItem('kds_client_id', clientId);
 
@@ -485,6 +586,21 @@
             await tryFailover();
         }
 
+        // Stale-connection watchdog: mirrors the Dart client's heartbeat check.
+        // If no message (including pings) has arrived in a while, force a reconnect
+        // even if the socket object still looks "open".
+        function startStaleWatchdog() {
+            if (staleWatchdogTimer) clearInterval(staleWatchdogTimer);
+            staleWatchdogTimer = setInterval(() => {
+                const diffSeconds = (Date.now() - lastHeartbeat) / 1000;
+                if (diffSeconds > 75) {
+                    console.log('Connection stale (' + diffSeconds.toFixed(0) + 's), reconnecting...');
+                    closeSocketForSwitch();
+                    connect();
+                }
+            }, 15000);
+        }
+
         async function fetchOrders() {
             try {
                 const res = await fetch(hostBase() + '/api/orders');
@@ -507,6 +623,7 @@
             document.getElementById('volume-slider').value = currentVolume;
             document.getElementById('theme-select').value = currentTheme;
             document.getElementById('confetti-toggle').checked = enableConfetti;
+            document.getElementById('clock-format-select').value = use24Hour ? '24' : '12';
         }
 
         function playNotification() {
@@ -527,11 +644,23 @@
             } catch(e) {}
         }
 
+        function formatTime(date) {
+            if (use24Hour) {
+                return date.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+            return date.toLocaleTimeString([], { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        }
+
         function updateClock() {
-            const now = new Date();
-            document.getElementById('clock').innerText = now.toLocaleTimeString([], { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' });
+            document.getElementById('clock').innerText = formatTime(new Date());
         }
         setInterval(updateClock, 1000);
+
+        function updateClockFormat(val) {
+            use24Hour = val === '24';
+            localStorage.setItem('kds_clock_format', val);
+            updateClock();
+        }
 
         function startClient() {
             currentStation = document.getElementById('station-input').value.toUpperCase() || 'GENERAL';
@@ -544,6 +673,7 @@
             setHostStatus(hostEntryFor(apiBase)?.role === 'backup' ? 'backup' : 'primary');
             connect();
             setInterval(watchdogTick, 10000);
+            startStaleWatchdog();
         }
 
         function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
@@ -606,6 +736,74 @@
             }
         }
 
+        // ---------- Rush Mode ----------
+        function setRushMode(enabled) {
+            isRushMode = enabled === true;
+            document.getElementById('rush-banner').classList.toggle('show', isRushMode);
+            document.documentElement.style.setProperty('--ticket-width', isRushMode ? '280px' : '340px');
+            document.getElementById('queue').classList.toggle('rush-mode', isRushMode);
+            renderQueue();
+        }
+
+        // ---------- Kitchen Broadcast ----------
+        function showBroadcast(message) {
+            document.getElementById('broadcast-message').innerText = (message || '').toUpperCase();
+            document.getElementById('broadcast-overlay').style.display = 'flex';
+            if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+        }
+        function closeBroadcast() {
+            document.getElementById('broadcast-overlay').style.display = 'none';
+        }
+
+        // ---------- Recent Bumps / Recall ----------
+        function addRecentBump(order) {
+            recentBumps.unshift({ order, finishedAt: new Date() });
+            if (recentBumps.length > 20) recentBumps.pop();
+            document.getElementById('recent-badge').classList.add('show');
+        }
+
+        function removeRecentBump(uuid) {
+            recentBumps = recentBumps.filter(r => r.order.uuid !== uuid);
+            if (recentBumps.length === 0) document.getElementById('recent-badge').classList.remove('show');
+        }
+
+        function openRecentBumps() {
+            renderRecentList();
+            document.getElementById('recent-modal').style.display = 'flex';
+        }
+        function closeRecentBumps() {
+            document.getElementById('recent-modal').style.display = 'none';
+        }
+
+        function renderRecentList() {
+            const el = document.getElementById('recent-list');
+            if (recentBumps.length === 0) {
+                el.innerHTML = '<div class="empty-recent">No recent bumps</div>';
+                return;
+            }
+            el.innerHTML = recentBumps.map(r => `
+                <div class="recent-item">
+                    <div class="info">
+                        <b>#${r.order.uuid.substring(0, 4).toUpperCase()}${r.order.customerName ? ' - ' + r.order.customerName.toUpperCase() : ''}</b>
+                        <span>${formatTime(r.finishedAt)}</span>
+                    </div>
+                    <button class="btn-recall" onclick="recallOrder('${r.order.uuid}')">RECALL</button>
+                </div>
+            `).join('');
+        }
+
+        function recallOrder(uuid) {
+            const entry = recentBumps.find(r => r.order.uuid === uuid);
+            if (!entry) return;
+            // Reset bump state on recall, same as re-adding a live order
+            entry.order.items.forEach(i => i.isBumped = false);
+            orders.push(entry.order);
+            removeRecentBump(uuid);
+            renderRecentList();
+            renderQueue();
+            closeRecentBumps();
+        }
+
         function wsUrl() {
             const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
             return hostBase().replace(/^http/, scheme) + '/ws';
@@ -615,6 +813,7 @@
             if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
             socket = new WebSocket(wsUrl());
             socket.onopen = () => {
+                lastHeartbeat = Date.now();
                 setHostStatus(hostEntryFor(apiBase)?.role === 'backup' ? 'backup' : 'primary');
                 socket.send(JSON.stringify({
                     type: 'RegisterClient',
@@ -625,7 +824,21 @@
                 fetchOrders();
             };
             socket.onmessage = (event) => {
+                lastHeartbeat = Date.now();
                 const data = JSON.parse(event.data);
+
+                if (data.type === 'ping') return; // heartbeat only, nothing else to do
+
+                if (data.type === 'KitchenBroadcast') {
+                    showBroadcast(data.message);
+                    return;
+                }
+
+                if (data.type === 'RushModeChanged') {
+                    setRushMode(data.enabled === true);
+                    return;
+                }
+
                 if (data.type === 'OrderCreated' || data.type === 'OrderUpdated') {
                     const tag = currentStation.toUpperCase();
                     const shouldNotify = (tag === 'GENERAL' || tag === 'EXPO') ||
@@ -652,6 +865,8 @@
                     }
                     renderQueue();
                 } else if (data.type === 'TicketFinished') {
+                    const order = orders.find(o => o.uuid === data.orderUuid);
+                    if (order) addRecentBump(order);
                     orders = orders.filter(o => o.uuid !== data.orderUuid);
                     renderQueue();
                 } else if (data.type === 'SetStation') {
@@ -700,6 +915,7 @@
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'TicketFinished', orderUuid }));
                 }
+                addRecentBump(order);
                 const card = document.querySelector(`[data-uuid="${orderUuid}"]`);
                 if (card) {
                     card.classList.add('removing');
@@ -755,6 +971,7 @@
                 let agingClass = 'fresh';
                 if (minutes >= 10) agingClass = 'overdue';
                 else if (minutes >= 5) agingClass = 'warning';
+                const isLate = minutes >= 15;
 
                 const allBumped = order.displayItems.every(i => i.isBumped);
                 let card = queueEl.querySelector(`[data-uuid="${order.uuid}"]`);
@@ -771,7 +988,9 @@
 
                 // Update card state without destroying the element
                 if (!card.classList.contains('removing')) {
-                    card.className = `ticket-card ${agingClass}`;
+                    card.className = `ticket-card ${agingClass}${isLate ? ' late-glow' : ''}`;
+                    card.style.minWidth = 'var(--ticket-width)';
+                    card.style.maxWidth = 'var(--ticket-width)';
                 }
 
                 const itemsHtml = order.displayItems.map(item => `
@@ -789,6 +1008,10 @@
                 else if (minutes >= 5) timerColor = 'var(--modifier-yellow)';
                 else timerColor = 'var(--primary-green)';
 
+                const customerLine = (!isRushMode && order.customerName)
+                    ? `<div class="customer-name">${order.customerName.toUpperCase()}</div>`
+                    : '';
+
                 card.innerHTML = `
                     <div class="ticket-header">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -797,6 +1020,7 @@
                                 ${Math.max(0, minutes)}m
                             </span>
                         </div>
+                        ${customerLine}
                     </div>
                     <div class="ticket-items">${itemsHtml}</div>
                     <div class="ticket-footer ${allBumped ? 'ready' : ''}" onclick="finishTicket('${order.uuid}')">
