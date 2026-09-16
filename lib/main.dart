@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/app_state_providers.dart';
@@ -6,6 +7,7 @@ import 'providers/settings_provider.dart';
 import 'ui/host/host_home.dart';
 import 'ui/client/client_home.dart';
 import 'ui/shared/role_selection_screen.dart';
+import 'ui/webhost/web_host_home.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -245,6 +247,9 @@ class MyApp extends ConsumerWidget {
   Widget _getHome(DeviceRole role) {
     switch (role) {
       case DeviceRole.host:
+        // On web, the browser cannot run the Shelf server/Drift — route to the
+        // web host UI which connects back to the native host over WebSocket.
+        if (kIsWeb) return const WebHostHome();
         return const HostHome();
       case DeviceRole.client:
         return const ClientHome();

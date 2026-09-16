@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.js_interop) '../../web_io_stub.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,8 @@ import '../../providers/client_state_provider.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/discovery_service.dart';
+import '../../models/order_status.dart';
+import '../shared/responsive_utils.dart';
 
 class ClientHome extends ConsumerStatefulWidget {
   const ClientHome({super.key});
@@ -22,11 +25,11 @@ class ClientHome extends ConsumerStatefulWidget {
   ConsumerState<ClientHome> createState() => _ClientHomeState();
 }
 
-class _ClientHomeState extends ConsumerState<ClientHome> {
+class _ClientHomeState extends ConsumerState<ClientHome>
+    with WidgetsBindingObserver {
   bool _isConnected = false;
   StreamSubscription? _wsSubscription;
   StreamSubscription? _discoverySub;
-  final Map<String, DiscoveredHost> _knownHosts = {};
   String _deviceIp = '...';
   final _audioPlayer = AudioPlayer();
   late ConfettiController _confettiController;
@@ -35,23 +38,45 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   Timer? _connectionWatchdog;
   String? _lastConnectedHost;
   int? _lastConnectedPort;
+  int _discoveryRetries = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _confettiController = ConfettiController(
       duration: const Duration(seconds: 1),
     );
+    // Allow both orientations for flexibility, though landscape is preferred
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLastHostAndStart();
       _fetchIp();
-      _startDiscovery();
     });
+  }
+
+  Future<void> _loadLastHostAndStart() async {
+    final prefs = await SharedPreferences.getInstance();
+    _lastConnectedHost = prefs.getString('last_host');
+    _lastConnectedPort = prefs.getInt('last_port');
+    _startDiscovery();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // Save battery by stopping discovery in background
+      _discoverySub?.cancel();
+      _connectionWatchdog?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_isConnected) _startDiscovery();
+    }
   }
 
   Future<void> _playSound() async {
@@ -60,17 +85,20 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       await _audioPlayer.setVolume(settings.clientVolume);
       await _audioPlayer.play(AssetSource('notification.mp3'));
     } catch (e) {
-      print('Error playing sound: $e');
+      debugPrint('Error playing sound: $e');
     }
   }
 
   void _handleIncomingMessage(String message) {
     _lastHeartbeat = DateTime.now();
     final data = jsonDecode(message);
-    if (data['type'] == 'ping') return; // Just update heartbeat
+    if (data['type'] == 'ping') return;
 
     if (data['type'] == 'KitchenBroadcast') {
-      _showBroadcastOverlay(data['message']);
+      _showBroadcastOverlay(
+        data['message'],
+        station: data['station']?.toString(),
+      );
     }
     if (data['type'] == 'RushModeChanged') {
       if (mounted) setState(() => _isRushMode = data['enabled'] == true);
@@ -100,6 +128,35 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
           .read(stationTagProvider.notifier)
           .set((data['station'] as String).toUpperCase());
     }
+    if (data['type'] == 'ReplayFinished') {
+      final orderData = data['order'];
+      final order = ClientOrder(
+        uuid: orderData['uuid'],
+        customerName: orderData['customerName'] ?? 'Guest',
+        timestamp: DateTime.parse(orderData['timestamp']),
+        status: OrderStatus.complete,
+        items: (orderData['items'] as List)
+            .map(
+              (i) => ClientItem(
+                uuid: i['uuid'],
+                name: i['name'],
+                modifiers: List<String>.from(i['modifiers'] ?? []),
+                stationTag: i['stationTag'] ?? 'GENERAL',
+                isBumped: true,
+              ),
+            )
+            .toList(),
+      );
+      ref.read(recentBumpsProvider.notifier).add(order);
+      return;
+    }
+    if (data['type'] == 'OrderDeleted') {
+      final orderUuid = data['orderUuid'] as String?;
+      if (orderUuid != null) {
+        ref.read(clientStateProvider.notifier).removeOrder(orderUuid);
+      }
+      return;
+    }
     final finishedOrder = ref
         .read(clientStateProvider.notifier)
         .handleEvent(message);
@@ -109,17 +166,22 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
   }
 
   Future<void> _fetchIp() async {
-    final interfaces = await NetworkInterface.list();
-    final addr = interfaces
-        .expand((i) => i.addresses)
-        .where((a) => a.type == InternetAddressType.IPv4 && !a.isLoopback)
-        .map((a) => a.address)
-        .join(', ');
-    if (mounted) setState(() => _deviceIp = addr);
+    try {
+      final interfaces = await NetworkInterface.list();
+      final addr = interfaces
+          .expand((i) => i.addresses)
+          .where((a) => a.type == InternetAddressType.IPv4 && !a.isLoopback)
+          .map((a) => a.address)
+          .join(', ');
+      if (mounted) setState(() => _deviceIp = addr.isEmpty ? 'NO IP' : addr);
+    } catch (e) {
+      if (mounted) setState(() => _deviceIp = 'ERROR');
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -128,29 +190,61 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _wsSubscription?.cancel();
+    _discoverySub?.cancel();
     _connectionWatchdog?.cancel();
     _confettiController.dispose();
     _audioPlayer.dispose();
     super.dispose();
   }
 
-  void _startDiscovery() {
+  void _startDiscovery() async {
     _discoverySub?.cancel();
-    _discoverySub = ref
-        .read(discoveryServiceProvider)
-        .discover()
-        .listen(
-          (host) {
-            if (!_isConnected && host.address.isNotEmpty) {
-              _connectToHost(host.address, host.port);
-            }
-          },
-          onError: (e) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Discovery error: $e')));
-          },
-        );
+    _discoveryRetries = 0;
+
+    // On web, mDNS/UDP discovery is unavailable — this page is usually served
+    // by the host itself, so just connect back to the origin.
+    if (kIsWeb) {
+      final originHost = Uri.base.host;
+      if (originHost.isNotEmpty && !_isConnected) {
+        _connectToHost(originHost, 8080);
+        return;
+      }
+    }
+
+    // Direct attempt if we have cached credentials
+    if (_lastConnectedHost != null &&
+        _lastConnectedPort != null &&
+        !_isConnected) {
+      _connectToHost(_lastConnectedHost!, _lastConnectedPort!);
+      return;
+    }
+
+    _listenForHosts();
+  }
+
+  void _listenForHosts() {
+    _discoverySub?.cancel();
+    _discoverySub = ref.read(discoveryServiceProvider).discover().listen((
+      host,
+    ) {
+      if (!_isConnected && host.address.isNotEmpty) {
+        _connectToHost(host.address, host.port);
+      }
+    }, onError: (e) => debugPrint('Discovery error: $e'));
+
+    // Backoff logic for battery optimization
+    Timer(const Duration(seconds: 30), () {
+      if (!_isConnected && mounted) {
+        _discoveryRetries++;
+        if (_discoveryRetries > 2) {
+          _discoverySub?.cancel();
+          // Wait 60s before retrying to save battery
+          Future.delayed(const Duration(seconds: 60), () {
+            if (!_isConnected && mounted) _listenForHosts();
+          });
+        }
+      }
+    });
   }
 
   void _connectToHost(String host, int port, {bool manual = false}) async {
@@ -168,11 +262,14 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     try {
       await ref.read(clientServiceProvider).connect(hostTrim, port);
     } catch (e) {
-      debugPrint('Host connection error: $e');
       if (!manual) _startDiscovery();
       if (mounted) setState(() => _isConnected = false);
       return;
     }
+
+    // Save successful connection for future boot speed & battery optimization
+    await prefs.setString('last_host', hostTrim);
+    await prefs.setInt('last_port', port);
 
     final registration = jsonEncode({
       'type': 'RegisterClient',
@@ -192,7 +289,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       if (!_isConnected) return;
       final diff = DateTime.now().difference(_lastHeartbeat).inSeconds;
       if (diff > 75) {
-        debugPrint('Connection stale ($diff s), reconnecting...');
         _connectToHost(_lastConnectedHost!, _lastConnectedPort!);
       }
     });
@@ -206,11 +302,9 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
             _handleIncomingMessage(message.toString());
           },
           onError: (e) {
-            debugPrint('Host connection error: $e');
             _handleDisconnect();
           },
           onDone: () {
-            debugPrint('Host connection closed.');
             _handleDisconnect();
           },
         );
@@ -230,7 +324,6 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     _wsSubscription?.cancel();
     _connectionWatchdog?.cancel();
 
-    // Auto-reconnect after a delay if we have last host
     if (_lastConnectedHost != null && _lastConnectedPort != null) {
       Future.delayed(const Duration(seconds: 3), () {
         if (!_isConnected && mounted) {
@@ -248,68 +341,8 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     final stationTag = ref.watch(stationTagProvider) ?? 'GENERAL';
     final settings = ref.watch(settingsProvider);
     final timeFormat = settings.use24HourFormat ? 'HH:mm:ss' : 'h:mm:ss a';
-
-    if (!_isConnected) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF030712),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(color: Color(0xFF22C55E)),
-              const SizedBox(height: 24),
-              const Text(
-                'SEARCHING FOR KITCHEN HOST...',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () => _showStationSelectionDialog(),
-                child: Text('STATION: ${stationTag.toUpperCase()}'),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() => _isConnected = false);
-                  _startDiscovery();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1F2937),
-                ),
-                child: const Text('RE-SCAN FOR HOST'),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => _showManualConnectDialog(),
-                child: const Text(
-                  'MANUAL CONNECT',
-                  style: TextStyle(color: Color(0xFF6B7280)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  _discoverySub?.cancel();
-                  ref.read(deviceRoleProvider.notifier).state =
-                      DeviceRole.unset;
-                },
-                child: const Text(
-                  'CANCEL',
-                  style: TextStyle(
-                    color: Color(0xFF6B7280),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final isTablet =
+        Responsive.isTablet(context) || Responsive.isDesktop(context);
 
     final isDark =
         settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
@@ -332,88 +365,190 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 Expanded(
                   child: tickets.isEmpty
                       ? _buildEmptyState(isDark)
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 16,
-                          ),
-                          itemCount: tickets.length,
-                          itemBuilder: (context, index) {
-                            final ticket = tickets[index];
-                            return TweenAnimationBuilder<double>(
-                              duration: const Duration(milliseconds: 400),
-                              curve: Curves.easeOutBack,
-                              tween: Tween(begin: 0.0, end: 1.0),
-                              builder: (context, value, child) {
-                                return Transform.translate(
-                                  offset: Offset(50 * (1 - value), 0),
-                                  child: Opacity(
-                                    opacity: value.clamp(0.0, 1.0),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: RepaintBoundary(
-                                child: _TicketCard(
-                                  key: ValueKey(ticket.uuid),
-                                  order: ticket,
-                                  stationFilter: stationTag,
-                                  isRushMode: _isRushMode,
-                                  onFinished: () {
-                                    if (settings.enableConfetti) {
-                                      _confettiController.play();
-                                    }
-                                  },
-                                  settings: settings,
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (isTablet) {
+                              // Grid for tablets (denser = smaller tiles)
+                              int crossCount = (constraints.maxWidth / 240)
+                                  .floor()
+                                  .clamp(1, 14);
+                              return GridView.builder(
+                                padding: const EdgeInsets.all(8),
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: crossCount,
+                                      crossAxisSpacing: 8,
+                                      mainAxisSpacing: 8,
+                                      childAspectRatio:
+                                          1.05, // shorter = smaller tiles
+                                    ),
+                                itemCount: tickets.length,
+                                itemBuilder: (context, index) =>
+                                    _buildAnimatedTicket(
+                                      tickets[index],
+                                      settings,
+                                      stationTag,
+                                    ),
+                              );
+                            } else {
+                              // Horizontal list for phones
+                              return ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
                                 ),
-                              ),
-                            );
+                                itemCount: tickets.length,
+                                itemBuilder: (context, index) =>
+                                    _buildAnimatedTicket(
+                                      tickets[index],
+                                      settings,
+                                      stationTag,
+                                    ),
+                              );
+                            }
                           },
                         ),
                 ),
               ],
             ),
           ),
-          IgnorePointer(
-            child: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConfettiWidget(
-                    confettiController: _confettiController,
-                    blastDirection: 0, // right
-                    emissionFrequency: 0.05,
-                    numberOfParticles: 20,
-                    maxBlastForce: 100,
-                    minBlastForce: 80,
-                    colors: const [
-                      Colors.green,
-                      Colors.blue,
-                      Colors.pink,
-                      Colors.orange,
-                      Colors.purple,
-                    ],
-                  ),
+          _buildConfetti(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedTicket(
+    ClientOrder ticket,
+    AppSettings settings,
+    String stationTag,
+  ) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutBack,
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(50 * (1 - value), 0),
+          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: RepaintBoundary(
+        child: _TicketCard(
+          key: ValueKey(ticket.uuid),
+          order: ticket,
+          stationFilter: stationTag,
+          isRushMode: _isRushMode,
+          onFinished: () {
+            if (settings.enableConfetti) {
+              _confettiController.play();
+            }
+          },
+          settings: settings,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionScreen(String stationTag) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF030712),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFF22C55E)),
+            const SizedBox(height: 24),
+            const Text(
+              'SEARCHING FOR KITCHEN HOST...',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => _showStationSelectionDialog(),
+              child: Text('STATION: ${stationTag.toUpperCase()}'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _isConnected = false);
+                _startDiscovery();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1F2937),
+              ),
+              child: const Text('RE-SCAN FOR HOST'),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => _showManualConnectDialog(),
+              child: const Text(
+                'MANUAL CONNECT',
+                style: TextStyle(color: Color(0xFF6B7280)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                _discoverySub?.cancel();
+                ref.read(deviceRoleProvider.notifier).setRole(DeviceRole.unset);
+              },
+              child: const Text(
+                'CANCEL',
+                style: TextStyle(
+                  color: Color(0xFF6B7280),
+                  fontWeight: FontWeight.w800,
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ConfettiWidget(
-                    confettiController: _confettiController,
-                    blastDirection: 3.14, // left
-                    emissionFrequency: 0.05,
-                    numberOfParticles: 20,
-                    maxBlastForce: 100,
-                    minBlastForce: 80,
-                    colors: const [
-                      Colors.green,
-                      Colors.blue,
-                      Colors.pink,
-                      Colors.orange,
-                      Colors.purple,
-                    ],
-                  ),
-                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfetti() {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: 0,
+              emissionFrequency: 0.05,
+              numberOfParticles: 20,
+              maxBlastForce: 100,
+              minBlastForce: 80,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple,
+              ],
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: 3.14,
+              emissionFrequency: 0.05,
+              numberOfParticles: 20,
+              maxBlastForce: 100,
+              minBlastForce: 80,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple,
               ],
             ),
           ),
@@ -475,12 +610,40 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 ),
               ),
               const SizedBox(width: 16),
-              Text(
-                'KDS ACTIVE • $_deviceIp',
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+              GestureDetector(
+                onTap: () {
+                  if (!_isConnected) _showManualConnectDialog();
+                },
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _isConnected
+                            ? const Color(0xFF22C55E)
+                            : Colors.red,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          if (_isConnected)
+                            BoxShadow(
+                              color: const Color(0xFF22C55E).withOpacity(0.5),
+                              blurRadius: 4,
+                              spreadRadius: 1,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'KDS • $_deviceIp ${_isConnected ? "" : "(OFFLINE)"}',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -496,7 +659,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                       style: TextStyle(
                         color: textColor,
                         fontFamily: 'monospace',
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -505,13 +668,15 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
               ),
               const SizedBox(width: 16),
               IconButton(
-                icon: Icon(Icons.history, color: textColor),
-                tooltip: 'Recall Bumps',
+                icon: Icon(Icons.history, color: textColor, size: 20),
                 onPressed: () => _showRecentBumpsDialog(),
               ),
-              const SizedBox(width: 8),
               IconButton(
-                icon: Icon(Icons.settings, color: textColor),
+                icon: Icon(Icons.swap_horiz, color: textColor, size: 20),
+                onPressed: () => _confirmSwitchRole(),
+              ),
+              IconButton(
+                icon: Icon(Icons.settings, color: textColor, size: 20),
                 onPressed: () => _showClientSettings(),
               ),
             ],
@@ -597,7 +762,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     );
   }
 
-  void _showBroadcastOverlay(String message) {
+  void _showBroadcastOverlay(String message, {String? station}) {
     if (!mounted) return;
     HapticFeedback.heavyImpact();
     showDialog(
@@ -609,13 +774,14 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
           borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: Colors.white, width: 4),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.campaign_rounded, color: Colors.white, size: 80),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.campaign_rounded, color: Colors.white, size: 80),
             const SizedBox(height: 24),
             const Text(
-              'IMPORTANT NOTIFICATION',
+              'NOTIFICATION',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
@@ -623,10 +789,24 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 letterSpacing: 1.5,
               ),
             ),
+            if (station != null && station.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'TO STATION: ${station.toUpperCase()}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Text(
               message.toUpperCase(),
               textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
@@ -634,6 +814,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
               ),
             ),
           ],
+        ),
         ),
         actions: [
           Center(
@@ -643,18 +824,11 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
                 ),
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
                   'ACKNOWLEDGE',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  style: TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
             ),
@@ -664,6 +838,33 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     );
   }
 
+  Future<void> _confirmSwitchRole() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('SWITCH DEVICE ROLE?',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        content: const Text(
+          'Return to the role selection screen?',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('SWITCH ROLE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    _wsSubscription?.cancel();
+    ref.read(deviceRoleProvider.notifier).setRole(DeviceRole.unset);
+  }
+
   void _showClientSettings() {
     showDialog(
       context: context,
@@ -671,168 +872,148 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
         builder: (context, ref, _) {
           final settings = ref.watch(settingsProvider);
           final notifier = ref.read(settingsProvider.notifier);
+          final isLight =
+              settings.themeMode == ThemeMode.light &&
+              !settings.clientHighContrast;
           return AlertDialog(
-            backgroundColor:
-                settings.themeMode == ThemeMode.light &&
-                    !settings.clientHighContrast
-                ? Colors.white
-                : const Color(0xFF1F2937),
+            backgroundColor: isLight ? Colors.white : const Color(0xFF1F2937),
             title: Text(
               'KDS SETTINGS',
               style: TextStyle(
-                color:
-                    settings.themeMode == ThemeMode.light &&
-                        !settings.clientHighContrast
-                    ? Colors.black
-                    : Colors.white,
+                color: isLight ? Colors.black : Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: const Text(
-                    'APPEARANCE',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  subtitle: SegmentedButton<ThemeMode>(
-                    segments: const [
-                      ButtonSegment(
-                        value: ThemeMode.light,
-                        label: Text('Light'),
-                        icon: Icon(Icons.light_mode),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.dark,
-                        label: Text('Dark'),
-                        icon: Icon(Icons.dark_mode),
-                      ),
-                    ],
-                    selected: {
-                      settings.themeMode == ThemeMode.system
-                          ? ThemeMode.dark
-                          : settings.themeMode,
-                    },
-                    onSelectionChanged: (val) =>
-                        notifier.setThemeMode(val.first),
-                  ),
-                ),
-                const Divider(),
-                const Text(
-                  'TEXT SIZE',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Slider(
-                  value: settings.clientTextScale,
-                  min: 0.8,
-                  max: 2.0,
-                  divisions: 6,
-                  activeColor: const Color(0xFF22C55E),
-                  onChanged: (val) => notifier.setClientTextScale(val),
-                ),
-                const Text(
-                  'ALERT VOLUME',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Slider(
-                  value: settings.clientVolume,
-                  min: 0.0,
-                  max: 1.0,
-                  activeColor: const Color(0xFF22C55E),
-                  onChanged: (val) => notifier.setClientVolume(val),
-                ),
-                SwitchListTile(
-                  title: Text(
-                    'HIGH CONTRAST',
-                    style: TextStyle(
-                      color:
-                          settings.themeMode == ThemeMode.light &&
-                              !settings.clientHighContrast
-                          ? Colors.black
-                          : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  value: settings.clientHighContrast,
-                  activeColor: const Color(0xFF22C55E),
-                  onChanged: (val) => notifier.setClientHighContrast(val),
-                ),
-                SwitchListTile(
-                  title: Text(
-                    'ENABLE CONFETTI',
-                    style: TextStyle(
-                      color:
-                          settings.themeMode == ThemeMode.light &&
-                              !settings.clientHighContrast
-                          ? Colors.black
-                          : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  value: settings.enableConfetti,
-                  activeColor: const Color(0xFF22C55E),
-                  onChanged: (val) => notifier.setEnableConfetti(val),
-                ),
-                ListTile(
-                  title: const Text(
-                    'CURRENT STATION',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  subtitle: Text(
-                    (ref.watch(stationTagProvider) ?? 'GENERAL').toUpperCase(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF22C55E),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  trailing: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showStationSelectionDialog();
-                    },
-                    child: const Text(
-                      'CHANGE',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    title: const Text(
+                      'APPEARANCE',
                       style: TextStyle(
-                        color: Color(0xFF22C55E),
-                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SegmentedButton<ThemeMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: ThemeMode.light,
+                            label: Text('Light'),
+                            icon: Icon(Icons.light_mode, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.dark,
+                            label: Text('Dark'),
+                            icon: Icon(Icons.dark_mode, size: 16),
+                          ),
+                        ],
+                        selected: {
+                          settings.themeMode == ThemeMode.system
+                              ? ThemeMode.dark
+                              : settings.themeMode,
+                        },
+                        onSelectionChanged: (val) =>
+                            notifier.setThemeMode(val.first),
                       ),
                     ),
                   ),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text(
-                    'EXIT KITCHEN MODE',
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
+                  const Divider(),
+                  _buildSlider(
+                    'TEXT SIZE',
+                    settings.clientTextScale,
+                    0.8,
+                    2.0,
+                    6,
+                    (val) => notifier.setClientTextScale(val),
+                  ),
+                  _buildSlider(
+                    'ALERT VOLUME',
+                    settings.clientVolume,
+                    0.0,
+                    1.0,
+                    null,
+                    (val) => notifier.setClientVolume(val),
+                  ),
+                  SwitchListTile(
+                    title: Text(
+                      'HIGH CONTRAST',
+                      style: TextStyle(
+                        color: isLight ? Colors.black : Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    value: settings.clientHighContrast,
+                    activeColor: const Color(0xFF22C55E),
+                    onChanged: (val) => notifier.setClientHighContrast(val),
+                  ),
+                  SwitchListTile(
+                    title: Text(
+                      'ENABLE CONFETTI',
+                      style: TextStyle(
+                        color: isLight ? Colors.black : Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    value: settings.enableConfetti,
+                    activeColor: const Color(0xFF22C55E),
+                    onChanged: (val) => notifier.setEnableConfetti(val),
+                  ),
+                  ListTile(
+                    title: const Text(
+                      'CURRENT STATION',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    subtitle: Text(
+                      (ref.watch(stationTagProvider) ?? 'GENERAL')
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF22C55E),
+                      ),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showStationSelectionDialog();
+                      },
+                      child: const Text(
+                        'CHANGE',
+                        style: TextStyle(
+                          color: Color(0xFF22C55E),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
-                  onTap: () {
-                    ref.read(deviceRoleProvider.notifier).state =
-                        DeviceRole.unset;
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
+                  const Divider(),
+                  ListTile(
+                    title: const Text(
+                      'EXIT KITCHEN MODE',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onTap: () {
+                      ref
+                          .read(deviceRoleProvider.notifier)
+                          .setRole(DeviceRole.unset);
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -846,6 +1027,40 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
     );
   }
 
+  Widget _buildSlider(
+    String label,
+    double value,
+    double min,
+    double max,
+    int? divisions,
+    ValueChanged<double> onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: const Color(0xFF22C55E),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
   Widget _buildEmptyState(bool isDark) {
     final textColor = isDark
         ? Colors.white.withOpacity(0.1)
@@ -854,13 +1069,13 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 120, color: textColor),
+          Icon(Icons.check_circle_outline, size: 100, color: textColor),
           const SizedBox(height: 16),
           Text(
             'QUEUE EMPTY',
             style: TextStyle(
               color: textColor,
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: FontWeight.w900,
               letterSpacing: 4,
             ),
@@ -939,7 +1154,7 @@ class _ClientHomeState extends ConsumerState<ClientHome> {
               style: const TextStyle(color: Colors.white),
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                hintText: 'PORT (default 8080)',
+                hintText: 'PORT (8080)',
                 hintStyle: TextStyle(color: Colors.grey),
               ),
             ),
@@ -994,22 +1209,22 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
     final stationFilter = widget.stationFilter;
     final settings = widget.settings;
     final isRushMode = widget.isRushMode;
+    final isTablet =
+        Responsive.isTablet(context) || Responsive.isDesktop(context);
 
     final elapsedMinutes = DateTime.now().difference(order.timestamp).inMinutes;
     final isDark =
         settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
     final isLate = elapsedMinutes >= 15;
-
     final pulse = ref.watch(globalPulseProvider).value ?? 1.0;
 
     Color agingColor;
-    if (elapsedMinutes < 5) {
-      agingColor = const Color(0xFF22C55E); // Green
-    } else if (elapsedMinutes < 10) {
-      agingColor = const Color(0xFFFACC15); // Yellow
-    } else {
-      agingColor = const Color(0xFFDC2626); // Red
-    }
+    if (elapsedMinutes < 5)
+      agingColor = const Color(0xFF22C55E);
+    else if (elapsedMinutes < 10)
+      agingColor = const Color(0xFFFACC15);
+    else
+      agingColor = const Color(0xFFDC2626);
 
     final displayItems = order.items.where((item) {
       if (stationFilter == 'GENERAL' || stationFilter == 'EXPO') return true;
@@ -1029,8 +1244,12 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: Container(
-        width: isRushMode ? 280 : 340,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
+        width: isTablet
+            ? null
+            : (isRushMode ? 240 : 290), // Flexible width on tablet
+        margin: isTablet
+            ? EdgeInsets.zero
+            : const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           border: Border.all(
             color: settings.clientHighContrast
@@ -1041,15 +1260,6 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
             width: settings.clientHighContrast ? 4 : 3,
           ),
           borderRadius: BorderRadius.circular(8),
-          boxShadow: isLate
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFFDC2626).withOpacity(0.3 * pulse),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1066,34 +1276,28 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                   ),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '#${order.uuid.substring(0, 4).toUpperCase()}${isRushMode ? "" : " • ${order.customerName.toUpperCase()}"}',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isDark ? Colors.white : Colors.black87,
-                            fontSize: isRushMode ? 22 : 28,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                  Expanded(
+                    child: Text(
+                      '#${order.uuid.substring(0, 4).toUpperCase()}${isRushMode ? "" : " • ${order.customerName.toUpperCase()}"}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: isRushMode ? 18 : 22,
+                        fontWeight: FontWeight.w900,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${elapsedMinutes.clamp(0, 999)}m',
-                        style: TextStyle(
-                          color: agingColor,
-                          fontSize: isRushMode ? 18 : 20,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
+                    ),
+                  ),
+                  Text(
+                    '${elapsedMinutes.clamp(0, 999)}m',
+                    style: TextStyle(
+                      color: agingColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
               ),
@@ -1128,7 +1332,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 16,
+                          vertical: 12,
                         ),
                         decoration: BoxDecoration(
                           border: Border(
@@ -1151,7 +1355,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                                     child: Icon(
                                       Icons.check_circle,
                                       color: Color(0xFF22C55E),
-                                      size: 24,
+                                      size: 20,
                                     ),
                                   ),
                                 Expanded(
@@ -1161,7 +1365,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                                       color: isDark
                                           ? Colors.white
                                           : Colors.black87,
-                                      fontSize: 20,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w900,
                                       decoration: item.isBumped
                                           ? TextDecoration.lineThrough
@@ -1173,36 +1377,21 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                             ),
                             if (item.modifiers.isNotEmpty)
                               Container(
-                                margin: const EdgeInsets.only(top: 8.0),
+                                margin: const EdgeInsets.only(top: 4.0),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFACC15),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: settings.clientHighContrast
-                                      ? Border.all(
-                                          color: Colors.black,
-                                          width: 2,
-                                        )
-                                      : null,
-                                  boxShadow: [
-                                    if (!settings.clientHighContrast)
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.3),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                  ],
                                 ),
                                 child: Text(
                                   item.modifiers.join(', ').toUpperCase(),
                                   style: const TextStyle(
                                     color: Colors.black,
                                     fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                    letterSpacing: 1.1,
+                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -1239,9 +1428,8 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
           final finishedOrder = ref
               .read(clientStateProvider.notifier)
               .removeOrder(order.uuid);
-          if (finishedOrder != null) {
+          if (finishedOrder != null)
             ref.read(recentBumpsProvider.notifier).add(finishedOrder);
-          }
         } else {
           for (var item in items) {
             if (!item.isBumped) {
@@ -1263,19 +1451,19 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
         }
       },
       child: Container(
-        height: 70,
+        height: 50,
         color: allBumped
             ? const Color(0xFF22C55E)
             : (isDark ? const Color(0xFF374151) : Colors.grey.shade300),
         alignment: Alignment.center,
         child: Text(
-          allBumped ? 'FINISH TICKET' : 'BUMP ALL',
+          allBumped ? 'FINISH' : 'BUMP ALL',
           style: TextStyle(
             color: allBumped
                 ? Colors.black
                 : (isDark ? Colors.white : Colors.black87),
             fontWeight: FontWeight.w900,
-            fontSize: 22,
+            fontSize: 16,
             letterSpacing: 2,
           ),
         ),

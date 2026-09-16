@@ -147,9 +147,31 @@ class AnalyticsView extends ConsumerWidget {
                             fontSize: 13,
                           ),
                         ),
-                        subtitle: Text(
-                          '${stat.quantity} units sold',
-                          style: const TextStyle(fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${stat.quantity} units sold',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            if (stat.modifierCounts.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  (stat.modifierCounts.entries.toList()..sort(
+                                        (a, b) => b.value.compareTo(a.value),
+                                      ))
+                                      .take(3)
+                                      .map((e) => '${e.key} (${e.value})')
+                                      .join(', '),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: theme.hintColor,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         trailing: Text(
                           '\$${stat.revenue.toStringAsFixed(2)}',
@@ -241,7 +263,24 @@ class AnalyticsView extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          if (stat.modifierCounts.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                'Top Modifiers: ' +
+                    (stat.modifierCounts.entries.toList()
+                          ..sort((a, b) => b.value.compareTo(a.value)))
+                        .take(2)
+                        .map((e) => e.key)
+                        .join(', '),
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: theme.hintColor.withOpacity(0.7),
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
           Stack(
             children: [
               Container(

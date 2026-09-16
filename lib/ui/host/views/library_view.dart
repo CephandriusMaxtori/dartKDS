@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.js_interop) '../../../web_path_provider_stub.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.js_interop) '../../../web_io_stub.dart';
 import '../../../models/database.dart';
 import '../../../providers/app_state_providers.dart';
 import '../../../providers/service_providers.dart';
@@ -30,6 +30,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   final _stockController = TextEditingController();
   final _categoryController = TextEditingController(text: 'All Items');
   bool _trackStock = false;
+  bool _oneTouch = false;
   String? _selectedStation;
 
   @override
@@ -246,6 +247,28 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           keyboard: TextInputType.number,
                         ),
                       ],
+                      Material(
+                        color: Colors.transparent,
+                        child: SwitchListTile(
+                          title: const Text(
+                            'ONE TOUCH ADD',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Adds to ticket instantly on tap (skips modifier screen).',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                          value: _oneTouch,
+                          onChanged: (val) => setState(() => _oneTouch = val),
+                          activeColor: const Color(0xFF2563EB),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                      ),
                       const SizedBox(height: 20),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
@@ -296,6 +319,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                       int.tryParse(_stockController.text) ?? 0,
                                     ),
                                     trackStock: drift.Value(_trackStock),
+                                    oneTouch: drift.Value(_oneTouch),
                                     updatedAtMs: drift.Value(
                                       DateTime.now().millisecondsSinceEpoch,
                                     ),
@@ -308,7 +332,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             _priceController.clear();
                             _stockController.clear();
                             _categoryController.text = 'All Items';
-                            setState(() => _trackStock = false);
+                            setState(() {
+                              _trackStock = false;
+                              _oneTouch = false;
+                            });
                           }
                         },
                         child: const Text(
@@ -383,6 +410,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                       'STOCK: ${item.stockQuantity}',
                                       const Color(0xFFFFF7ED),
                                       const Color(0xFFC2410C),
+                                    ),
+                                  if (item.oneTouch)
+                                    _buildTag(
+                                      'ONE TOUCH',
+                                      const Color(0xFFEFF6FF),
+                                      const Color(0xFF2563EB),
                                     ),
                                   ...item.tags.map(
                                     (t) => _buildTag(
@@ -835,6 +868,47 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
             ),
           ),
         ),
+        const SizedBox(height: 32),
+        const Text(
+          'DANGER ZONE',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 11,
+            color: Color(0xFFDC2626),
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Material(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: ListTile(
+              leading: const Icon(
+                Icons.delete_forever_rounded,
+                color: Color(0xFFDC2626),
+              ),
+              title: const Text(
+                'CLEAR ALL LIBRARY DATA',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: Color(0xFFDC2626),
+                ),
+              ),
+              subtitle: const Text(
+                'Wipe all items, stations, and modifiers',
+                style: TextStyle(fontSize: 11),
+              ),
+              onTap: () => _showResetLibraryConfirmation(db),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -849,6 +923,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
         'menuItems': items
             .map(
               (i) => {
+                'guid': i.guid,
                 'name': i.name,
                 'category': i.category,
                 'defaultStation': i.defaultStation,
@@ -858,6 +933,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 'price': i.price,
                 'stockQuantity': i.stockQuantity,
                 'trackStock': i.trackStock,
+                'oneTouch': i.oneTouch,
               },
             )
             .toList(),
@@ -869,10 +945,11 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       await file.writeAsString(jsonEncode(data));
       await Share.shareXFiles([XFile(file.path)], text: 'DartKDS Backup');
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
     }
   }
 
@@ -882,13 +959,47 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-      if (result != null && result.files.single.path != null) {
-        final data = jsonDecode(
-          await File(result.files.single.path!).readAsString(),
-        );
-        await db.transaction(() async {
-          final nowMs = DateTime.now().millisecondsSinceEpoch;
-          for (var s in data['stations'])
+      if (result == null || result.files.single.path == null) return;
+
+      final confirmation = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text(
+            'IMPORT LIBRARY',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          content: const Text(
+            'This will merge the backup data with your current library. Existing items with the same name will be updated.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'PROCEED',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmation != true) return;
+
+      final fileContent = await File(result.files.single.path!).readAsString();
+      final data = jsonDecode(fileContent) as Map<String, dynamic>;
+
+      if (data['menuItems'] == null) throw Exception('Invalid backup file');
+
+      await db.transaction(() async {
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+        // Import Stations
+        if (data['stations'] != null) {
+          for (var s in data['stations']) {
             await db
                 .into(db.stations)
                 .insertOnConflictUpdate(
@@ -897,7 +1008,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     updatedAtMs: drift.Value(nowMs),
                   ),
                 );
-          for (var m in data['globalModifiers'])
+          }
+        }
+
+        // Import Global Modifiers
+        if (data['globalModifiers'] != null) {
+          for (var m in data['globalModifiers']) {
             await db
                 .into(db.globalModifiers)
                 .insertOnConflictUpdate(
@@ -906,43 +1022,108 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     updatedAtMs: drift.Value(nowMs),
                   ),
                 );
-          for (var i in data['menuItems'])
-            await db
-                .into(db.menuItems)
-                .insert(
-                  MenuItemsCompanion.insert(
-                    guid: drift.Value(const Uuid().v4()),
-                    name: i['name'],
-                    category: i['category'],
-                    defaultStation: i['defaultStation'],
-                    modifiers: List<String>.from(i['modifiers']),
-                    requiredModifiers: drift.Value(
-                      i['requiredModifiers'] != null
-                          ? List<String>.from(i['requiredModifiers'])
-                          : <String>[],
-                    ),
-                    tags: drift.Value(
-                      i['tags'] != null
-                          ? List<String>.from(i['tags'])
-                          : <String>[],
-                    ),
-                    price: drift.Value(i['price'] ?? 0.0),
-                    stockQuantity: drift.Value(i['stockQuantity'] ?? 0),
-                    trackStock: drift.Value(i['trackStock'] ?? false),
-                    updatedAtMs: drift.Value(nowMs),
-                  ),
-                );
-        });
-        if (mounted)
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Import Successful')));
+          }
+        }
+
+        // Import Menu Items (Merge by name)
+        final existingItems = await db.select(db.menuItems).get();
+        for (var i in data['menuItems']) {
+          final String name = i['name'] ?? 'Unknown Item';
+          final String guid = i['guid'] ?? const Uuid().v4();
+
+          final existing = existingItems
+              .where((e) => e.name == name)
+              .firstOrNull;
+
+          final companion = MenuItemsCompanion(
+            guid: drift.Value(guid),
+            name: drift.Value(name),
+            category: drift.Value(i['category'] ?? 'All Items'),
+            defaultStation: drift.Value(i['defaultStation'] ?? 'Main Station'),
+            modifiers: drift.Value(List<String>.from(i['modifiers'] ?? [])),
+            requiredModifiers: drift.Value(
+              List<String>.from(i['requiredModifiers'] ?? []),
+            ),
+            tags: drift.Value(List<String>.from(i['tags'] ?? [])),
+            price: drift.Value((i['price'] as num?)?.toDouble() ?? 0.0),
+            stockQuantity: drift.Value(i['stockQuantity'] ?? 0),
+            trackStock: drift.Value(i['trackStock'] ?? false),
+            oneTouch: drift.Value(i['oneTouch'] ?? false),
+            updatedAtMs: drift.Value(nowMs),
+          );
+
+          if (existing != null) {
+            await (db.update(
+              db.menuItems,
+            )..where((t) => t.id.equals(existing.id))).write(companion);
+          } else {
+            await db.into(db.menuItems).insert(companion);
+          }
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Import Successful'),
+            backgroundColor: Color(0xFF22C55E),
+          ),
+        );
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showResetLibraryConfirmation(KDSDatabase db) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'CLEAR ALL LIBRARY DATA?',
+          style: TextStyle(fontWeight: FontWeight.w900, color: Colors.red),
+        ),
+        content: const Text(
+          'This will delete all Menu Items, Stations, and Global Modifiers. Order history will be preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'CLEAR ALL',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await db.transaction(() async {
+        await db.delete(db.menuItems).go();
+        await db.delete(db.stations).go();
+        await db.delete(db.globalModifiers).go();
+        // Re-seed default station
+        await db
+            .into(db.stations)
+            .insert(StationsCompanion.insert(name: 'Main Station'));
+      });
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Library Cleared')));
+      }
     }
   }
 
@@ -1028,6 +1209,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
       text: item.stockQuantity.toString(),
     );
     bool trackStock = item.trackStock;
+    bool oneTouch = item.oneTouch;
     String selectedStation = item.defaultStation;
 
     showDialog(
@@ -1079,6 +1261,21 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     'Current Stock',
                     keyboard: TextInputType.number,
                   ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text(
+                    'ONE TOUCH ADD',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                  subtitle: const Text(
+                    'Adds to ticket instantly on tap (skips modifier screen).',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                  value: oneTouch,
+                  onChanged: (val) => setDialogState(() => oneTouch = val),
+                  activeColor: const Color(0xFF2563EB),
+                  contentPadding: EdgeInsets.zero,
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: stations.any((s) => s.name == selectedStation)
@@ -1162,6 +1359,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                         int.tryParse(stockCtrl.text) ?? 0,
                       ),
                       trackStock: drift.Value(trackStock),
+                      oneTouch: drift.Value(oneTouch),
                       updatedAtMs: drift.Value(
                         DateTime.now().millisecondsSinceEpoch,
                       ),

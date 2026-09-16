@@ -238,6 +238,7 @@ class SyncEngine {
           tags: Value((m['tags'] as List?)?.cast<String>() ?? []),
           stockQuantity: Value(m['stockQuantity'] as int),
           trackStock: Value(m['trackStock'] as bool),
+          oneTouch: Value(m['oneTouch'] as bool? ?? false),
           updatedAtMs: Value(updatedAtMs),
         ),
       );
@@ -254,6 +255,7 @@ class SyncEngine {
           tags: Value((m['tags'] as List?)?.cast<String>() ?? []),
           stockQuantity: Value(m['stockQuantity'] as int),
           trackStock: Value(m['trackStock'] as bool),
+          oneTouch: Value(m['oneTouch'] as bool? ?? false),
           updatedAtMs: Value(updatedAtMs),
         ),
         mode: InsertMode.replace,
@@ -349,6 +351,7 @@ class SyncEngine {
     'tags': m.tags,
     'stockQuantity': m.stockQuantity,
     'trackStock': m.trackStock,
+    'oneTouch': m.oneTouch,
     'updatedAtMs': m.updatedAtMs,
   };
 

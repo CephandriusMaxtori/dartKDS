@@ -136,59 +136,99 @@ class MoreView extends ConsumerWidget {
   void _showBroadcastDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
     final theme = Theme.of(context);
+    String? targetStation;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: theme.dividerColor),
-        ),
-        title: const Text(
-          'KITCHEN BROADCAST',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-        ),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: 'e.g. 86 Smash Burgers, Rush coming in...',
-            hintStyle: TextStyle(color: theme.hintColor, fontSize: 13),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: theme.cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: theme.dividerColor),
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'CANCEL',
-              style: TextStyle(color: Color(0xFF666666)),
+          title: const Text(
+            'KITCHEN BROADCAST',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+          ),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 86 Smash Burgers, Rush coming in...',
+                    hintStyle: TextStyle(color: theme.hintColor, fontSize: 13),
+                    border:
+                        OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  value: targetStation,
+                  decoration: const InputDecoration(
+                    labelText: 'TARGET STATION',
+                    prefixIcon: Icon(Icons.dns_rounded, size: 18),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('ALL SCREENS'),
+                    ),
+                    for (final s in ref
+                        .read(hostServerProvider)
+                        .connectedStations)
+                      DropdownMenuItem<String>(
+                        value: s,
+                        child: Text(s),
+                      ),
+                  ],
+                  onChanged: (v) => setDlgState(() => targetStation = v),
+                ),
+              ],
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'CANCEL',
+                style: TextStyle(color: Color(0xFF666666)),
+              ),
             ),
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                ref
-                    .read(hostServerProvider)
-                    .broadcast(
-                      jsonEncode({
-                        'type': 'KitchenBroadcast',
-                        'message': controller.text.trim(),
-                      }),
-                    );
-                Navigator.pop(context);
-              }
-            },
-            child: const Text(
-              'SEND TO ALL SCREENS',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                if (controller.text.isNotEmpty) {
+                  final payload = jsonEncode({
+                    'type': 'KitchenBroadcast',
+                    'message': controller.text.trim(),
+                    if (targetStation != null) 'station': targetStation,
+                  });
+                  if (targetStation != null) {
+                    ref
+                        .read(hostServerProvider)
+                        .broadcastToStation(targetStation!, payload);
+                  } else {
+                    ref.read(hostServerProvider).broadcast(payload);
+                  }
+                  Navigator.pop(context);
+                }
+              },
+              child: Text(
+                targetStation == null ? 'SEND TO ALL SCREENS' : 'SEND TO $targetStation',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

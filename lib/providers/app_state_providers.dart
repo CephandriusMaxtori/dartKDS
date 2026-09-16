@@ -7,7 +7,28 @@ enum DeviceRole { unset, host, client }
 
 enum HostRole { primary, backup }
 
-final deviceRoleProvider = StateProvider<DeviceRole>((ref) => DeviceRole.unset);
+class DeviceRoleNotifier extends StateNotifier<DeviceRole> {
+  final SharedPreferences prefs;
+
+  DeviceRoleNotifier(this.prefs) : super(_load(prefs));
+
+  static DeviceRole _load(SharedPreferences prefs) {
+    final roleIndex = prefs.getInt('device_role') ?? DeviceRole.unset.index;
+    if (roleIndex >= DeviceRole.values.length) return DeviceRole.unset;
+    return DeviceRole.values[roleIndex];
+  }
+
+  void setRole(DeviceRole role) {
+    state = role;
+    prefs.setInt('device_role', role.index);
+  }
+}
+
+final deviceRoleProvider =
+    StateNotifierProvider<DeviceRoleNotifier, DeviceRole>((ref) {
+      final prefs = ref.watch(sharedPrefsProvider);
+      return DeviceRoleNotifier(prefs);
+    });
 
 class HostIdentityNotifier extends StateNotifier<HostIdentity> {
   final SharedPreferences prefs;

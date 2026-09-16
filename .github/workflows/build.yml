@@ -31,6 +31,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Build Web UI (local canvaskit)
+        run: flutter build web --no-web-resources-cdn
+
+      - name: Bundle Web UI into assets
+        run: dart run scripts/bundle_webui.dart
+
       - name: Build Release APKs
         run: flutter build apk --release --split-per-abi
 

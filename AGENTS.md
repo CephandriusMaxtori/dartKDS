@@ -13,6 +13,24 @@ flutter build apk            # build Android APK
 flutter build ios            # build iOS
 ```
 
+### Web UI (bundled into host APK)
+
+The host serves a Flutter web client over LAN at `http://<host-ip>:8080`. Features are
+written once in Dart — no hand-written JS/HTML. To rebuild and bundle into the APK:
+
+```bash
+flutter build web --no-web-resources-cdn   # local canvaskit (air-gapped)
+dart run scripts/bundle_webui.dart         # copy build/web → assets/webui
+flutter build apk                          # APK now includes the web UI
+```
+
+During desktop development the host serves `build/web` directly from disk (no bundle step needed).
+On mobile hosts the bundled `assets/webui/` assets are served via `rootBundle` fallback.
+
+`python build.py` runs all three steps (web build, bundle, APK). Run `python build.py --help`
+for flags (`--debug`, `--web-only`, `--skip-web`, `--apk-only`). It wraps `flutter`/`dart` via
+`cmd /c` on Windows because the toolchain shims are `.bat` files.
+
 ## Code Generation (Drift)
 
 ```bash
@@ -53,9 +71,11 @@ lib/
 │   ├── service_providers.dart         # Riverpod wiring (db, server, discovery, client)
 │   └── settings_provider.dart         # Persisted settings via SharedPreferences
 ├── services/
-│   ├── host_server.dart               # Shelf HTTP server + WebSocket hub (port 8080)
+│   ├── host_server.dart               # Shelf HTTP server + WebSocket hub (port 8080), serves web UI
 │   ├── discovery_service.dart         # mDNS + UDP broadcast discovery
-│   └── client_service.dart            # WebSocket client connector
+│   ├── client_service.dart            # WebSocket client connector
+│   ├── sync_service.dart              # Multi-host sync (pulls/pushes changes over HTTP)
+│   └── sync_engine.dart               # Change-set snapshot/apply logic for sync
 └── ui/
     ├── client/
     │   └── client_home.dart           # Kitchen display UI
@@ -72,6 +92,13 @@ lib/
     └── shared/
         └── role_selection_screen.dart # Host/Client role picker
 ```
+
+### Web stubs (`lib/web_*.dart`)
+
+Stub files that replace native-only packages (`dart:io`, `shelf_io`, `nsd`, `path_provider`,
+`drift/native`, `drift/isolate`) when compiling to Flutter Web. The web build is client-only;
+host mode is blocked at the role selection screen. Conditionals use
+`if (dart.library.js_interop)` with `as` prefix **after** the `if` clause.
 
 ## Key Conventions
 

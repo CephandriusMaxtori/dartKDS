@@ -1,10 +1,11 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.js_interop) '../web_io_stub.dart';
 import 'dart:isolate';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:drift/isolate.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:drift/native.dart' if (dart.library.js_interop) '../web_drift_native_stub.dart';
+import 'package:drift/isolate.dart' if (dart.library.js_interop) '../web_drift_isolate_stub.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.js_interop) '../web_path_provider_stub.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'order_status.dart';
 import 'item_status.dart';
 
@@ -39,6 +40,7 @@ class MenuItems extends Table {
       text().map(const NullableListStringConverter()).nullable()();
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))();
   BoolColumn get trackStock => boolean().withDefault(const Constant(false))();
+  BoolColumn get oneTouch => boolean().withDefault(const Constant(false))();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
 }
 
@@ -121,7 +123,7 @@ class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -229,50 +231,79 @@ class KDSDatabase extends _$KDSDatabase {
             Index('item_name', 'CREATE INDEX item_name ON k_d_s_items (name)'),
           );
         }
+        if (from < 11) {
+          // Version 11: one-touch menu items (add to ticket on single tap).
+          try {
+            await m.addColumn(menuItems, menuItems.oneTouch);
+          } catch (e) {}
+        }
       },
     );
   }
 
   Stream<List<ItemSalesStat>> getItemSalesStats() {
-    final quantity = kDSItems.id.count();
-    final revenue = kDSItems.price.sum();
+    return select(kDSItems).watch().map((rows) {
+      final statsMap = <String, ItemSalesStat>{};
 
-    final query = select(kDSItems).addColumns([quantity, revenue]);
-    query.groupBy([kDSItems.name]);
-    query.orderBy([OrderingTerm.desc(revenue)]);
-
-    return query.watch().map((rows) {
-      return rows.map((row) {
-        return ItemSalesStat(
-          name: row.readTable(kDSItems).name,
-          quantity: row.read(quantity) ?? 0,
-          revenue: row.read(revenue) ?? 0.0,
+      for (final row in rows) {
+        final stat = statsMap.putIfAbsent(
+          row.name,
+          () => ItemSalesStat(
+            name: row.name,
+            quantity: 0,
+            revenue: 0.0,
+            modifierCounts: {},
+          ),
         );
-      }).toList();
+
+        stat.quantity++;
+        stat.revenue += row.price;
+        for (final mod in row.modifiers) {
+          if (mod.isNotEmpty) {
+            stat.modifierCounts[mod] = (stat.modifierCounts[mod] ?? 0) + 1;
+          }
+        }
+      }
+
+      final sorted = statsMap.values.toList()
+        ..sort((a, b) => b.revenue.compareTo(a.revenue));
+      return sorted.take(25).toList();
     });
   }
 }
 
 class ItemSalesStat {
   final String name;
-  final int quantity;
-  final double revenue;
+  int quantity;
+  double revenue;
+  final Map<String, int> modifierCounts;
+
   ItemSalesStat({
     required this.name,
     required this.quantity,
     required this.revenue,
+    this.modifierCounts = const {},
   });
 }
 
 LazyDatabase _openConnection() {
+  if (kIsWeb) {
+    return LazyDatabase(() async {
+      throw UnsupportedError(
+        'Local database is not available on web. Use the web build as a '
+        'display client connected to a host device.',
+      );
+    });
+  }
   return LazyDatabase(() async {
     try {
       final dbFolder = await getApplicationDocumentsDirectory();
       final file = File(p.join(dbFolder.path, 'db.sqlite'));
-      return NativeDatabase(file);
+
+      // Use isolate for all database operations to keep UI thread smooth
+      final driftIsolate = await _createDriftIsolate(file.path);
+      return driftIsolate.connect();
     } catch (e) {
-      // If we can't open the DB, we're in trouble.
-      // This will at least let the StreamBuilder catch an error.
       throw Exception("Failed to open database: $e");
     }
   });
@@ -289,7 +320,15 @@ Future<DriftIsolate> _createDriftIsolate(String path) async {
 }
 
 void _startBackground(_IsolateStartRequest request) {
-  final executor = NativeDatabase(File(request.path));
+  final executor = NativeDatabase(
+    File(request.path),
+    setup: (db) {
+      // Performance optimizations for SQLite
+      db.execute('PRAGMA journal_mode = WAL');
+      db.execute('PRAGMA synchronous = NORMAL');
+      db.execute('PRAGMA foreign_keys = ON');
+    },
+  );
   final driftIsolate = DriftIsolate.inCurrent(
     () => DatabaseConnection(executor),
   );

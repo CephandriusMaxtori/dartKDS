@@ -1093,6 +1093,21 @@ class $MenuItemsTable extends MenuItems
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _oneTouchMeta = const VerificationMeta(
+    'oneTouch',
+  );
+  @override
+  late final GeneratedColumn<bool> oneTouch = GeneratedColumn<bool>(
+    'one_touch',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("one_touch" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
     'updatedAtMs',
   );
@@ -1118,6 +1133,7 @@ class $MenuItemsTable extends MenuItems
     tags,
     stockQuantity,
     trackStock,
+    oneTouch,
     updatedAtMs,
   ];
   @override
@@ -1189,6 +1205,12 @@ class $MenuItemsTable extends MenuItems
         trackStock.isAcceptableOrUnknown(data['track_stock']!, _trackStockMeta),
       );
     }
+    if (data.containsKey('one_touch')) {
+      context.handle(
+        _oneTouchMeta,
+        oneTouch.isAcceptableOrUnknown(data['one_touch']!, _oneTouchMeta),
+      );
+    }
     if (data.containsKey('updated_at_ms')) {
       context.handle(
         _updatedAtMsMeta,
@@ -1257,6 +1279,10 @@ class $MenuItemsTable extends MenuItems
         DriftSqlType.bool,
         data['${effectivePrefix}track_stock'],
       )!,
+      oneTouch: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}one_touch'],
+      )!,
       updatedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_ms'],
@@ -1289,6 +1315,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
   final List<String> tags;
   final int stockQuantity;
   final bool trackStock;
+  final bool oneTouch;
   final int updatedAtMs;
   const MenuItemData({
     required this.id,
@@ -1302,6 +1329,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
     required this.tags,
     required this.stockQuantity,
     required this.trackStock,
+    required this.oneTouch,
     required this.updatedAtMs,
   });
   @override
@@ -1330,6 +1358,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
     }
     map['stock_quantity'] = Variable<int>(stockQuantity);
     map['track_stock'] = Variable<bool>(trackStock);
+    map['one_touch'] = Variable<bool>(oneTouch);
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
     return map;
   }
@@ -1347,6 +1376,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
       tags: Value(tags),
       stockQuantity: Value(stockQuantity),
       trackStock: Value(trackStock),
+      oneTouch: Value(oneTouch),
       updatedAtMs: Value(updatedAtMs),
     );
   }
@@ -1370,6 +1400,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
       tags: serializer.fromJson<List<String>>(json['tags']),
       stockQuantity: serializer.fromJson<int>(json['stockQuantity']),
       trackStock: serializer.fromJson<bool>(json['trackStock']),
+      oneTouch: serializer.fromJson<bool>(json['oneTouch']),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
     );
   }
@@ -1388,6 +1419,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
       'tags': serializer.toJson<List<String>>(tags),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
       'trackStock': serializer.toJson<bool>(trackStock),
+      'oneTouch': serializer.toJson<bool>(oneTouch),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
     };
   }
@@ -1404,6 +1436,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
     List<String>? tags,
     int? stockQuantity,
     bool? trackStock,
+    bool? oneTouch,
     int? updatedAtMs,
   }) => MenuItemData(
     id: id ?? this.id,
@@ -1417,6 +1450,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
     tags: tags ?? this.tags,
     stockQuantity: stockQuantity ?? this.stockQuantity,
     trackStock: trackStock ?? this.trackStock,
+    oneTouch: oneTouch ?? this.oneTouch,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
   MenuItemData copyWithCompanion(MenuItemsCompanion data) {
@@ -1440,6 +1474,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
       trackStock: data.trackStock.present
           ? data.trackStock.value
           : this.trackStock,
+      oneTouch: data.oneTouch.present ? data.oneTouch.value : this.oneTouch,
       updatedAtMs: data.updatedAtMs.present
           ? data.updatedAtMs.value
           : this.updatedAtMs,
@@ -1460,6 +1495,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
           ..write('tags: $tags, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('trackStock: $trackStock, ')
+          ..write('oneTouch: $oneTouch, ')
           ..write('updatedAtMs: $updatedAtMs')
           ..write(')'))
         .toString();
@@ -1478,6 +1514,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
     tags,
     stockQuantity,
     trackStock,
+    oneTouch,
     updatedAtMs,
   );
   @override
@@ -1495,6 +1532,7 @@ class MenuItemData extends DataClass implements Insertable<MenuItemData> {
           other.tags == this.tags &&
           other.stockQuantity == this.stockQuantity &&
           other.trackStock == this.trackStock &&
+          other.oneTouch == this.oneTouch &&
           other.updatedAtMs == this.updatedAtMs);
 }
 
@@ -1510,6 +1548,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
   final Value<List<String>> tags;
   final Value<int> stockQuantity;
   final Value<bool> trackStock;
+  final Value<bool> oneTouch;
   final Value<int> updatedAtMs;
   const MenuItemsCompanion({
     this.id = const Value.absent(),
@@ -1523,6 +1562,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
     this.tags = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.trackStock = const Value.absent(),
+    this.oneTouch = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
   });
   MenuItemsCompanion.insert({
@@ -1537,6 +1577,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
     this.tags = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.trackStock = const Value.absent(),
+    this.oneTouch = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
   }) : name = Value(name),
        category = Value(category),
@@ -1554,6 +1595,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
     Expression<String>? tags,
     Expression<int>? stockQuantity,
     Expression<bool>? trackStock,
+    Expression<bool>? oneTouch,
     Expression<int>? updatedAtMs,
   }) {
     return RawValuesInsertable({
@@ -1568,6 +1610,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
       if (tags != null) 'tags': tags,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
       if (trackStock != null) 'track_stock': trackStock,
+      if (oneTouch != null) 'one_touch': oneTouch,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
     });
   }
@@ -1584,6 +1627,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
     Value<List<String>>? tags,
     Value<int>? stockQuantity,
     Value<bool>? trackStock,
+    Value<bool>? oneTouch,
     Value<int>? updatedAtMs,
   }) {
     return MenuItemsCompanion(
@@ -1598,6 +1642,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
       tags: tags ?? this.tags,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       trackStock: trackStock ?? this.trackStock,
+      oneTouch: oneTouch ?? this.oneTouch,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
     );
   }
@@ -1646,6 +1691,9 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
     if (trackStock.present) {
       map['track_stock'] = Variable<bool>(trackStock.value);
     }
+    if (oneTouch.present) {
+      map['one_touch'] = Variable<bool>(oneTouch.value);
+    }
     if (updatedAtMs.present) {
       map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
     }
@@ -1666,6 +1714,7 @@ class MenuItemsCompanion extends UpdateCompanion<MenuItemData> {
           ..write('tags: $tags, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('trackStock: $trackStock, ')
+          ..write('oneTouch: $oneTouch, ')
           ..write('updatedAtMs: $updatedAtMs')
           ..write(')'))
         .toString();
@@ -3230,6 +3279,7 @@ typedef $$MenuItemsTableCreateCompanionBuilder =
       Value<List<String>> tags,
       Value<int> stockQuantity,
       Value<bool> trackStock,
+      Value<bool> oneTouch,
       Value<int> updatedAtMs,
     });
 typedef $$MenuItemsTableUpdateCompanionBuilder =
@@ -3245,6 +3295,7 @@ typedef $$MenuItemsTableUpdateCompanionBuilder =
       Value<List<String>> tags,
       Value<int> stockQuantity,
       Value<bool> trackStock,
+      Value<bool> oneTouch,
       Value<int> updatedAtMs,
     });
 
@@ -3312,6 +3363,11 @@ class $$MenuItemsTableFilterComposer
 
   ColumnFilters<bool> get trackStock => $composableBuilder(
     column: $table.trackStock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get oneTouch => $composableBuilder(
+    column: $table.oneTouch,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3385,6 +3441,11 @@ class $$MenuItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get oneTouch => $composableBuilder(
+    column: $table.oneTouch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => ColumnOrderings(column),
@@ -3442,6 +3503,9 @@ class $$MenuItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get oneTouch =>
+      $composableBuilder(column: $table.oneTouch, builder: (column) => column);
+
   GeneratedColumn<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => column,
@@ -3490,6 +3554,7 @@ class $$MenuItemsTableTableManager
                 Value<List<String>> tags = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> trackStock = const Value.absent(),
+                Value<bool> oneTouch = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
               }) => MenuItemsCompanion(
                 id: id,
@@ -3503,6 +3568,7 @@ class $$MenuItemsTableTableManager
                 tags: tags,
                 stockQuantity: stockQuantity,
                 trackStock: trackStock,
+                oneTouch: oneTouch,
                 updatedAtMs: updatedAtMs,
               ),
           createCompanionCallback:
@@ -3518,6 +3584,7 @@ class $$MenuItemsTableTableManager
                 Value<List<String>> tags = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<bool> trackStock = const Value.absent(),
+                Value<bool> oneTouch = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
               }) => MenuItemsCompanion.insert(
                 id: id,
@@ -3531,6 +3598,7 @@ class $$MenuItemsTableTableManager
                 tags: tags,
                 stockQuantity: stockQuantity,
                 trackStock: trackStock,
+                oneTouch: oneTouch,
                 updatedAtMs: updatedAtMs,
               ),
           withReferenceMapper: (p0) => p0

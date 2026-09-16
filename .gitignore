@@ -44,3 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /node_modules/
+
+# Generated single-file web UI bundle (scripts/bundle_webui.dart).
+# Commit a tiny placeholder so `flutter build`/CI succeeds on a fresh checkout.
+/assets/webui.bin
+
+# Gradle build reports (regenerated on every build)
+/android/build/

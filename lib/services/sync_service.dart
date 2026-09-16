@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.js_interop) '../web_io_stub.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/database.dart';
 import '../providers/app_state_providers.dart';

@@ -30,6 +30,31 @@ class _HostHomeState extends ConsumerState<HostHome> {
   bool _initialized = false;
   Set<String> _knownClientIds = {};
 
+  @override
+  void initState() {
+    super.initState();
+    // On app restart the persisted host role lands directly on HostHome
+    // without going through role selection, so (re)start host services here.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startHostServices());
+  }
+
+  Future<void> _startHostServices() async {
+    try {
+      await startHostServices(ref);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'HOST START FAILED: $e',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   void _onClientsChanged(List<ConnectedClient> clients) {
     final ids = clients.map((c) => c.id).toSet();
     if (!_initialized) {
@@ -44,6 +69,33 @@ class _HostHomeState extends ConsumerState<HostHome> {
     for (final client in newClients) {
       _showClientConnectedDialog(client);
     }
+  }
+
+  Future<void> _confirmSwitchRole() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('SWITCH DEVICE ROLE?',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        content: const Text(
+          'Return to the role selection screen? Host services will stop.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('SWITCH ROLE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(hostServerProvider).stop();
+    ref.read(deviceRoleProvider.notifier).setRole(DeviceRole.unset);
   }
 
   Future<void> _showClientConnectedDialog(ConnectedClient client) async {
@@ -174,6 +226,11 @@ class _HostHomeState extends ConsumerState<HostHome> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Switch device role',
+            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+            onPressed: () => _confirmSwitchRole(),
+          ),
           Row(
             children: [
               Text(

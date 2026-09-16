@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/order_status.dart';
+import '../models/item_status.dart';
 import 'app_state_providers.dart';
 
 class ClientOrder {
@@ -62,6 +63,11 @@ class ClientStateNotifier extends StateNotifier<List<ClientOrder>> {
       if (data['type'] == 'TicketFinished') {
         return removeOrder(data['orderUuid']);
       }
+      if (data['type'] == 'OrderDeleted') {
+        final uuid = data['orderUuid'] as String?;
+        if (uuid != null) removeOrder(uuid);
+        return null;
+      }
       if (data['type'] == 'OrderCreated' || data['type'] == 'OrderUpdated') {
         final orderData = data['order'];
         final isUpdate = data['type'] == 'OrderUpdated';
@@ -78,6 +84,8 @@ class ClientStateNotifier extends StateNotifier<List<ClientOrder>> {
                   name: i['name'],
                   modifiers: List<String>.from(i['modifiers']),
                   stationTag: i['stationTag'],
+                  isBumped:
+                      (i['status'] as int?) == ItemStatus.bumped.index,
                 ),
               )
               .toList(),
