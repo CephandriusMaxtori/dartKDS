@@ -55,6 +55,16 @@ def tools_ok():
     return True
 
 
+def ensure_webui_placeholder():
+    """The web build validates every pubspec asset, including the bundled web UI
+    (assets/webui.bin) that only exists after bundling. Create an empty placeholder
+    so an initial fresh build can compile; bundle_webui.dart overwrites it."""
+    placeholder = ROOT / "assets" / "webui.bin"
+    if not placeholder.exists():
+        placeholder.touch()
+        print("==> Created empty assets/webui.bin placeholder (bundled later)")
+
+
 def fail(step):
     print(f"\nERROR: {step} failed.", file=sys.stderr)
     return 1
@@ -92,6 +102,7 @@ def main():
 
     if not args.apk_only:
         if not args.skip_web:
+            ensure_webui_placeholder()
             if run(["flutter", "build", "web", "--no-web-resources-cdn"]) != 0:
                 return fail("Web UI build")
         if run(["dart", "run", "scripts/bundle_webui.dart"]) != 0:

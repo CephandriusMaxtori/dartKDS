@@ -1550,7 +1550,6 @@ class HostServer {
           },
         }),
       );
-      }));
     }
   }
 

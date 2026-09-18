@@ -1419,14 +1419,6 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                   ],
                 ),
               ),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: ListView.builder(
                 padding: EdgeInsets.zero,
@@ -1532,7 +1524,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildFooter(List<ClientItem> items, bool isDark) {
