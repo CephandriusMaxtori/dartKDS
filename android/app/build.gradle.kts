@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.hoid.kds.dartkds"
-    compileSdk = 36
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

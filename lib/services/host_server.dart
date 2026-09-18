@@ -5,9 +5,12 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
-import 'package:shelf/shelf_io.dart' if (dart.library.js_interop) '../web_shelf_io_stub.dart' as io;
+import 'package:shelf/shelf_io.dart'
+    if (dart.library.js_interop) '../web_shelf_io_stub.dart'
+    as io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:shelf_web_socket/shelf_web_socket.dart' if (dart.library.js_interop) '../web_shelf_ws_stub.dart';
+import 'package:shelf_web_socket/shelf_web_socket.dart'
+    if (dart.library.js_interop) '../web_shelf_ws_stub.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' as drift;
@@ -608,6 +611,8 @@ class HostServer {
       );
     });
 
+    router.post('/api/webhooks/square', _handleSquareWebhook);
+
     router.get(
       '/ws',
       webSocketHandler((WebSocketChannel webSocket) {
@@ -670,34 +675,35 @@ class HostServer {
                 }
 
                 // Replay recent finished orders into the client's bumps list
-                final finishedOrders = allOrders
-                    .where((o) => o.status == OrderStatus.complete)
-                    .toList()
-                  ..sort((a, b) =>
-                      b.timestamp.compareTo(a.timestamp));
+                final finishedOrders =
+                    allOrders
+                        .where((o) => o.status == OrderStatus.complete)
+                        .toList()
+                      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
                 if (finishedOrders.length > 20) {
                   finishedOrders.removeRange(20, finishedOrders.length);
                 }
                 if (finishedOrders.isNotEmpty) {
-                  final allFinishedItems = await (_db!.select(
-                    _db!.kDSItems,
-                  )..where(
-                        (t) => t.orderUuid.isIn(
-                          finishedOrders.map((o) => o.uuid).toList(),
-                        ),
-                      ))
-                      .get();
+                  final allFinishedItems =
+                      await (_db!.select(_db!.kDSItems)..where(
+                            (t) => t.orderUuid.isIn(
+                              finishedOrders.map((o) => o.uuid).toList(),
+                            ),
+                          ))
+                          .get();
                   _broadcastFinishedOrders(finishedOrders, allFinishedItems);
                 }
               } else if (data['type'] == 'RegisterWebHost') {
                 isWebHost = true;
                 clientId = data['id'];
                 _webHostChannels[clientId!] = webSocket;
-                webSocket.sink.add(jsonEncode({
-                  'type': 'WebHostReady',
-                  'hostId': hostId,
-                  'role': role,
-                }));
+                webSocket.sink.add(
+                  jsonEncode({
+                    'type': 'WebHostReady',
+                    'hostId': hostId,
+                    'role': role,
+                  }),
+                );
                 _sendSnapshot(webSocket);
               } else if (data['type'] == 'CreateOrder') {
                 final orderData = data['order'];
@@ -838,10 +844,9 @@ class HostServer {
                   _db!.kDSItems,
                 )..where((t) => t.orderUuid.equals(orderUuid))).go();
                 for (final item in orderData['items'] as List) {
-                  final itemUuid =
-                      (item['uuid'] as String?)?.isNotEmpty == true
-                          ? item['uuid'] as String
-                          : const Uuid().v4();
+                  final itemUuid = (item['uuid'] as String?)?.isNotEmpty == true
+                      ? item['uuid'] as String
+                      : const Uuid().v4();
                   await _db!
                       .into(_db!.kDSItems)
                       .insert(
@@ -860,29 +865,31 @@ class HostServer {
                         ),
                       );
                 }
-                broadcast(jsonEncode({
-                  'type': 'OrderUpdated',
-                  'order': {
-                    'uuid': orderUuid,
-                    'customerName': orderData['customerName'] ?? 'Guest',
-                    'timestamp': DateTime.now().toIso8601String(),
-                    'status': OrderStatus.pending.index,
-                    'items': (orderData['items'] as List)
-                        .map(
-                          (i) => {
-                            'uuid': i['uuid'],
-                            'name': i['name'],
-                            'modifiers': List<String>.from(
-                              i['modifiers'] ?? [],
-                            ),
-                            'stationTag': i['stationTag'] ?? 'GENERAL',
-                            'status': ItemStatus.pending.index,
-                            'price': i['price'] ?? 0,
-                          },
-                        )
-                        .toList(),
-                  },
-                }));
+                broadcast(
+                  jsonEncode({
+                    'type': 'OrderUpdated',
+                    'order': {
+                      'uuid': orderUuid,
+                      'customerName': orderData['customerName'] ?? 'Guest',
+                      'timestamp': DateTime.now().toIso8601String(),
+                      'status': OrderStatus.pending.index,
+                      'items': (orderData['items'] as List)
+                          .map(
+                            (i) => {
+                              'uuid': i['uuid'],
+                              'name': i['name'],
+                              'modifiers': List<String>.from(
+                                i['modifiers'] ?? [],
+                              ),
+                              'stationTag': i['stationTag'] ?? 'GENERAL',
+                              'status': ItemStatus.pending.index,
+                              'price': i['price'] ?? 0,
+                            },
+                          )
+                          .toList(),
+                    },
+                  }),
+                );
               } else if (data['type'] == 'DeleteOrder') {
                 final orderUuid = data['orderUuid'] as String?;
                 if (orderUuid != null) {
@@ -893,10 +900,9 @@ class HostServer {
                     _db!.kDSOrders,
                   )..where((t) => t.uuid.equals(orderUuid))).go();
                 }
-                broadcast(jsonEncode({
-                  'type': 'OrderDeleted',
-                  'orderUuid': orderUuid,
-                }));
+                broadcast(
+                  jsonEncode({'type': 'OrderDeleted', 'orderUuid': orderUuid}),
+                );
               } else if (data['type'] == 'RecallOrder') {
                 final orderUuid = data['orderUuid'] as String?;
                 if (orderUuid != null) {
@@ -918,38 +924,36 @@ class HostServer {
                     ),
                   );
                   // Broadcast the order back as fresh for clients
-                  final order =
-                      await (_db!.select(
-                        _db!.kDSOrders,
-                      )..where((t) => t.uuid.equals(orderUuid)))
-                          .getSingleOrNull();
+                  final order = await (_db!.select(
+                    _db!.kDSOrders,
+                  )..where((t) => t.uuid.equals(orderUuid))).getSingleOrNull();
                   if (order != null) {
                     final items = await (_db!.select(
                       _db!.kDSItems,
-                    )..where(
-                          (t) => t.orderUuid.equals(orderUuid),
-                        )).get();
-                    broadcast(jsonEncode({
-                      'type': 'OrderCreated',
-                      'order': {
-                        'uuid': order.uuid,
-                        'customerName': order.customerName,
-                        'timestamp': order.timestamp.toIso8601String(),
-                        'status': OrderStatus.pending.index,
-                        'items': items
-                            .map(
-                              (i) => {
-                                'uuid': i.uuid,
-                                'name': i.name,
-                                'modifiers': i.modifiers,
-                                'stationTag': i.stationTag,
-                                'status': ItemStatus.pending.index,
-                                'price': i.price,
-                              },
-                            )
-                            .toList(),
-                      },
-                    }));
+                    )..where((t) => t.orderUuid.equals(orderUuid))).get();
+                    broadcast(
+                      jsonEncode({
+                        'type': 'OrderCreated',
+                        'order': {
+                          'uuid': order.uuid,
+                          'customerName': order.customerName,
+                          'timestamp': order.timestamp.toIso8601String(),
+                          'status': OrderStatus.pending.index,
+                          'items': items
+                              .map(
+                                (i) => {
+                                  'uuid': i.uuid,
+                                  'name': i.name,
+                                  'modifiers': i.modifiers,
+                                  'stationTag': i.stationTag,
+                                  'status': ItemStatus.pending.index,
+                                  'price': i.price,
+                                },
+                              )
+                              .toList(),
+                        },
+                      }),
+                    );
                   }
                 }
               } else if (data['type'] == 'SetStock') {
@@ -997,40 +1001,42 @@ class HostServer {
                       trackStock: drift.Value(
                         menu['trackStock'] as bool? ?? false,
                       ),
-                      oneTouch: drift.Value(
-                        menu['oneTouch'] as bool? ?? false,
-                      ),
+                      oneTouch: drift.Value(menu['oneTouch'] as bool? ?? false),
                       updatedAtMs: drift.Value(now),
                     ),
                   );
                 } else {
-                  await _db!.into(_db!.menuItems).insert(
-                    MenuItemsCompanion.insert(
-                      guid: drift.Value(const Uuid().v4()),
-                      name: menu['name'] as String,
-                      category: (menu['category'] ?? 'All Items').toString(),
-                      defaultStation:
-                          (menu['defaultStation'] ?? 'Main Station').toString(),
-                      modifiers: _stringList(menu['modifiers']),
-                      requiredModifiers: drift.Value(
-                        _stringList(menu['requiredModifiers']),
-                      ),
-                      tags: drift.Value(_stringList(menu['tags'])),
-                      price: drift.Value(
-                        (menu['price'] as num?)?.toDouble() ?? 0.0,
-                      ),
-                      stockQuantity: drift.Value(
-                        (menu['stockQuantity'] as num?)?.toInt() ?? 0,
-                      ),
-                      trackStock: drift.Value(
-                        menu['trackStock'] as bool? ?? false,
-                      ),
-                      oneTouch: drift.Value(
-                        menu['oneTouch'] as bool? ?? false,
-                      ),
-                      updatedAtMs: drift.Value(now),
-                    ),
-                  );
+                  await _db!
+                      .into(_db!.menuItems)
+                      .insert(
+                        MenuItemsCompanion.insert(
+                          guid: drift.Value(const Uuid().v4()),
+                          name: menu['name'] as String,
+                          category: (menu['category'] ?? 'All Items')
+                              .toString(),
+                          defaultStation:
+                              (menu['defaultStation'] ?? 'Main Station')
+                                  .toString(),
+                          modifiers: _stringList(menu['modifiers']),
+                          requiredModifiers: drift.Value(
+                            _stringList(menu['requiredModifiers']),
+                          ),
+                          tags: drift.Value(_stringList(menu['tags'])),
+                          price: drift.Value(
+                            (menu['price'] as num?)?.toDouble() ?? 0.0,
+                          ),
+                          stockQuantity: drift.Value(
+                            (menu['stockQuantity'] as num?)?.toInt() ?? 0,
+                          ),
+                          trackStock: drift.Value(
+                            menu['trackStock'] as bool? ?? false,
+                          ),
+                          oneTouch: drift.Value(
+                            menu['oneTouch'] as bool? ?? false,
+                          ),
+                          updatedAtMs: drift.Value(now),
+                        ),
+                      );
                 }
               } else if (data['type'] == 'DeleteMenu') {
                 final menuId = (data['id'] as num?)?.toInt();
@@ -1055,12 +1061,14 @@ class HostServer {
                     ),
                   );
                 } else {
-                  await _db!.into(_db!.stations).insert(
-                    StationsCompanion.insert(
-                      name: name,
-                      updatedAtMs: drift.Value(now),
-                    ),
-                  );
+                  await _db!
+                      .into(_db!.stations)
+                      .insert(
+                        StationsCompanion.insert(
+                          name: name,
+                          updatedAtMs: drift.Value(now),
+                        ),
+                      );
                 }
               } else if (data['type'] == 'DeleteStation') {
                 final stationId = (data['id'] as num?)?.toInt();
@@ -1085,12 +1093,14 @@ class HostServer {
                     ),
                   );
                 } else {
-                  await _db!.into(_db!.globalModifiers).insert(
-                    GlobalModifiersCompanion.insert(
-                      name: name,
-                      updatedAtMs: drift.Value(now),
-                    ),
-                  );
+                  await _db!
+                      .into(_db!.globalModifiers)
+                      .insert(
+                        GlobalModifiersCompanion.insert(
+                          name: name,
+                          updatedAtMs: drift.Value(now),
+                        ),
+                      );
                 }
               } else if (data['type'] == 'DeleteModifier') {
                 final modId = (data['id'] as num?)?.toInt();
@@ -1115,10 +1125,12 @@ class HostServer {
                   broadcast(payload);
                 }
               } else if (data['type'] == 'SetRushMode') {
-                broadcast(jsonEncode({
-                  'type': 'RushModeChanged',
-                  'enabled': data['enabled'] == true,
-                }));
+                broadcast(
+                  jsonEncode({
+                    'type': 'RushModeChanged',
+                    'enabled': data['enabled'] == true,
+                  }),
+                );
               } else if (data['type'] == 'RequestSnapshot') {
                 if (isWebHost) _sendSnapshot(webSocket);
               } else if (data['type'] == 'StationChanged') {
@@ -1152,7 +1164,10 @@ class HostServer {
 
     // ── Web UI (compiled Flutter web build) ───────────────────
     router.get('/', (Request request) => _serveIndex());
-    router.get('/<path|.*>', (Request request, String path) => _serveWebFile(path));
+    router.get(
+      '/<path|.*>',
+      (Request request, String path) => _serveWebFile(path),
+    );
 
     _startDbWatchers();
 
@@ -1260,7 +1275,10 @@ class HostServer {
     } catch (_) {
       return null;
     }
-    final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
     final view = ByteData.sublistView(bytes);
     var offset = 0;
     final count = view.getUint32(offset);
@@ -1287,7 +1305,8 @@ class HostServer {
     final ext = p.extension(path).toLowerCase();
     final mime = _webMimeTypes[ext] ?? 'application/octet-stream';
     final immutable =
-        cacheable && (path.startsWith('assets/') || path.startsWith('canvaskit/'));
+        cacheable &&
+        (path.startsWith('assets/') || path.startsWith('canvaskit/'));
     return Response.ok(
       bytes,
       headers: {
@@ -1334,14 +1353,15 @@ class HostServer {
     }
   }
 
-  List<Map<String, dynamic>> get connectedClientsList =>
-      _clients
-          .map((c) => {
-                'id': c.id,
-                'deviceName': c.deviceName,
-                'currentStation': c.currentStation,
-              })
-          .toList();
+  List<Map<String, dynamic>> get connectedClientsList => _clients
+      .map(
+        (c) => {
+          'id': c.id,
+          'deviceName': c.deviceName,
+          'currentStation': c.currentStation,
+        },
+      )
+      .toList();
 
   List<String> get connectedStations {
     final stations = <String>{};
@@ -1392,6 +1412,7 @@ class HostServer {
     void watch<T>(drift.Selectable<T> query) {
       _dbWatchers.add(query.watch().listen((_) => _notifyWebHostDebounced()));
     }
+
     watch(db.select(db.kDSOrders));
     watch(db.select(db.kDSItems));
     watch(db.select(db.menuItems));
@@ -1421,23 +1442,22 @@ class HostServer {
 
   Future<String> _buildHostSnapshotJson() async {
     final db = _db!;
-    final orders = await (db.select(db.kDSOrders)
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.timestamp)])
-          ..limit(200))
-        .get();
+    final orders =
+        await (db.select(db.kDSOrders)
+              ..orderBy([(t) => drift.OrderingTerm.desc(t.timestamp)])
+              ..limit(200))
+            .get();
     final allItems = await (db.select(db.kDSItems)).get();
     final itemsByOrder = <String, List<Map<String, dynamic>>>{};
     for (final i in allItems) {
-      itemsByOrder
-          .putIfAbsent(i.orderUuid, () => [])
-          .add({
-            'uuid': i.uuid,
-            'name': i.name,
-            'modifiers': i.modifiers,
-            'stationTag': i.stationTag,
-            'status': i.status.index,
-            'price': i.price,
-          });
+      itemsByOrder.putIfAbsent(i.orderUuid, () => []).add({
+        'uuid': i.uuid,
+        'name': i.name,
+        'modifiers': i.modifiers,
+        'stationTag': i.stationTag,
+        'status': i.status.index,
+        'price': i.price,
+      });
     }
     final menu = await db.select(db.menuItems).get();
     final stations = await db.select(db.stations).get();
@@ -1479,8 +1499,7 @@ class HostServer {
           )
           .toList(),
       'stations': stations.map((s) => {'id': s.id, 'name': s.name}).toList(),
-      'modifiers':
-          modifiers.map((m) => {'id': m.id, 'name': m.name}).toList(),
+      'modifiers': modifiers.map((m) => {'id': m.id, 'name': m.name}).toList(),
       'clients': _clients
           .map(
             (c) => {
@@ -1501,7 +1520,10 @@ class HostServer {
     } catch (_) {}
   }
 
-  void _broadcastFinishedOrders(List<KDSOrderData> orders, List<KDSItemData> allItems) async {
+  void _broadcastFinishedOrders(
+    List<KDSOrderData> orders,
+    List<KDSItemData> allItems,
+  ) async {
     for (final order in orders) {
       final items = allItems
           .where((i) => i.orderUuid == order.uuid)
@@ -1516,16 +1538,132 @@ class HostServer {
             },
           )
           .toList();
-      broadcast(jsonEncode({
-        'type': 'ReplayFinished',
-        'order': {
-          'uuid': order.uuid,
-          'customerName': order.customerName,
-          'timestamp': order.timestamp.toIso8601String(),
-          'status': order.status.index,
-          'items': items,
-        },
+      broadcast(
+        jsonEncode({
+          'type': 'ReplayFinished',
+          'order': {
+            'uuid': order.uuid,
+            'customerName': order.customerName,
+            'timestamp': order.timestamp.toIso8601String(),
+            'status': order.status.index,
+            'items': items,
+          },
+        }),
+      );
       }));
     }
+  }
+
+  Future<Response> _handleSquareWebhook(Request request) async {
+    try {
+      final body = await _jsonBody(request);
+      if (body == null) return Response.badRequest(body: 'Invalid JSON');
+
+      // Square webhooks can be wrapped in a 'data' object
+      final orderData = body['data']?['object']?['order'] ?? body['order'];
+      if (orderData == null) {
+        return Response.badRequest(body: 'Square Order data not found');
+      }
+
+      await _processSquareOrder(orderData);
+      return Response.ok(jsonEncode({'success': true}));
+    } catch (e) {
+      print('Square Webhook Error: $e');
+      return Response.internalServerError(body: e.toString());
+    }
+  }
+
+  Future<void> _processSquareOrder(Map<String, dynamic> orderData) async {
+    final db = _db!;
+    final orderUuid = const Uuid().v4();
+    final timestamp = DateTime.now();
+
+    // Extract customer name or use "Square Order"
+    String customerName = 'Square Order';
+    if (orderData['customer_id'] != null) {
+      customerName = 'SQ: ${orderData['customer_id'].toString().substring(0, 5)}';
+    } else if (orderData['reference_id'] != null) {
+      customerName = 'SQ: ${orderData['reference_id']}';
+    }
+
+    await db.into(db.kDSOrders).insert(
+      KDSOrderData(
+        uuid: orderUuid,
+        customerName: customerName,
+        timestamp: timestamp,
+        status: OrderStatus.pending,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+
+    final List<Map<String, dynamic>> jsonItems = [];
+    final lineItems = orderData['line_items'] as List? ?? [];
+
+    for (final li in lineItems) {
+      final itemName = li['name'] ?? 'Unknown Item';
+      final itemUuid = const Uuid().v4();
+      final price = ((li['base_price_money']?['amount'] as num?)?.toDouble() ?? 0.0) / 100.0; // Square cents to dollars
+
+      // Extract modifiers
+      final List<String> mods = [];
+      final modifiers = li['modifiers'] as List? ?? [];
+      for (final m in modifiers) {
+        mods.add(m['name'] ?? '');
+      }
+
+      // Smart Routing: Match with local menu to get station
+      final menuMatches = await (db.select(db.menuItems)
+            ..where((t) => t.name.equals(itemName)))
+          .get();
+      String stationTag = 'GENERAL';
+      if (menuMatches.isNotEmpty) {
+        stationTag = menuMatches.first.defaultStation;
+        
+        // Handle stock if tracked
+        if (menuMatches.first.trackStock) {
+          final qty = int.tryParse(li['quantity'] ?? '1') ?? 1;
+          await (db.update(db.menuItems)..where((t) => t.id.equals(menuMatches.first.id))).write(
+            MenuItemsCompanion(
+              stockQuantity: drift.Value(menuMatches.first.stockQuantity - qty),
+              updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+            ),
+          );
+        }
+      }
+
+      await db.into(db.kDSItems).insert(
+        KDSItemsCompanion.insert(
+          uuid: itemUuid,
+          orderUuid: orderUuid,
+          name: itemName,
+          modifiers: mods,
+          stationTag: stationTag,
+          status: ItemStatus.pending,
+          price: drift.Value(price),
+          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+
+      jsonItems.add({
+        'uuid': itemUuid,
+        'name': itemName,
+        'modifiers': mods,
+        'stationTag': stationTag,
+        'status': ItemStatus.pending.index,
+        'price': price,
+      });
+    }
+
+    // Broadcast to all KDS clients
+    broadcast(jsonEncode({
+      'type': 'OrderCreated',
+      'order': {
+        'uuid': orderUuid,
+        'customerName': customerName,
+        'timestamp': timestamp.toIso8601String(),
+        'status': OrderStatus.pending.index,
+        'items': jsonItems,
+      },
+    }));
   }
 }

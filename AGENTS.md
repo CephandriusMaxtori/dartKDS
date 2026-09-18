@@ -71,7 +71,7 @@ lib/
 │   ├── service_providers.dart         # Riverpod wiring (db, server, discovery, client)
 │   └── settings_provider.dart         # Persisted settings via SharedPreferences
 ├── services/
-│   ├── host_server.dart               # Shelf HTTP server + WebSocket hub (port 8080), serves web UI
+│   ├── host_server.dart               # Shelf HTTP server + WS hub (port 8080), serves web UI & webhooks (Square)
 │   ├── discovery_service.dart         # mDNS + UDP broadcast discovery
 │   ├── client_service.dart            # WebSocket client connector
 │   ├── sync_service.dart              # Multi-host sync (pulls/pushes changes over HTTP)
@@ -105,6 +105,8 @@ host mode is blocked at the role selection screen. Conditionals use
 - **State management:** Riverpod (`flutter_riverpod`).
 - **Database:** Drift (SQLite ORM). Schema in `lib/models/database.dart`. All generated code in `database.g.dart`.
 - **Server:** Shelf framework (`shelf`, `shelf_router`, `shelf_web_socket`). Runs on port 8080.
+- **External POS Bridge (Square):** The Host server exposes a webhook endpoint at `/api/webhooks/square`. It accepts Square order payloads, performs smart routing based on item names, updates inventory, and broadcasts orders to KDS clients.
+- **Analytics:** Supports per-item modifier frequency tracking, allowing the kitchen to see the most popular customizations in the Sales Charts.
 - **Discovery:** mDNS via `nsd` package + UDP broadcast on port 41234.
 - **UUIDs:** `uuid` package (v4). Used for orders, items, client identity.
 - **No auth** — air-gapped LAN-only system.

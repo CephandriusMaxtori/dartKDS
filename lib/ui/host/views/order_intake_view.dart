@@ -304,113 +304,97 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       final item = items[index];
                       final isOut = item.trackStock && item.stockQuantity <= 0;
 
-                      return Material(
-                        color: isOut
-                            ? theme.dividerColor.withOpacity(0.3)
-                            : theme.cardColor,
-                        borderRadius: BorderRadius.circular(8),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: isOut
-                              ? null
-                              : () => _handleItemTap(context, ref, item),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isOut
-                                    ? Colors.transparent
-                                    : theme.dividerColor,
-                                width: 1,
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.name.toUpperCase(),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 14,
-                                    color: isOut
-                                        ? theme.hintColor
-                                        : theme.textTheme.bodyLarge?.color,
-                                    letterSpacing: -0.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        child: Material(
+                          color: isOut
+                              ? theme.dividerColor.withOpacity(0.2)
+                              : theme.cardColor,
+                          borderRadius: BorderRadius.circular(16),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: isOut
+                                ? null
+                                : () {
+                                    HapticFeedback.mediumImpact();
+                                    _handleItemTap(context, ref, item);
+                                  },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isOut
+                                      ? Colors.transparent
+                                      : theme.dividerColor,
+                                  width: 1.5,
                                 ),
-                                const Spacer(),
-                                if (item.tags.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(
-                                      [
-                                        if (item.oneTouch) '⚡ ONE TOUCH',
-                                        ...item.tags
-                                            .take(2)
-                                            .map((t) => t.toUpperCase()),
-                                      ].join(' • '),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.4,
-                                        color: isOut
-                                            ? theme.hintColor
-                                            : item.oneTouch
-                                                ? const Color(0xFF2563EB)
-                                                : const Color(0xFF2563EB),
-                                      ),
+                              ),
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name.toUpperCase(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: isOut
+                                          ? theme.hintColor
+                                          : theme.textTheme.bodyLarge?.color,
+                                      letterSpacing: -0.3,
                                     ),
-                                  )
-                                else if (item.oneTouch)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(
-                                      '⚡ ONE TOUCH',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.4,
-                                        color: isOut
-                                            ? theme.hintColor
-                                            : const Color(0xFF2563EB),
-                                      ),
-                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    if (item.trackStock)
-                                      Text(
-                                        'QTY: ${item.stockQuantity}',
+                                  const Spacer(),
+                                  if (item.oneTouch || item.tags.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Text(
+                                        [
+                                          if (item.oneTouch) '⚡ QUICK',
+                                          ...item.tags
+                                              .take(1)
+                                              .map((t) => t.toUpperCase()),
+                                        ].join(' • '),
                                         style: TextStyle(
-                                          fontSize: 10,
-                                          color: isOut
-                                              ? Colors.red
-                                              : const Color(0xFF666666),
-                                          fontWeight: FontWeight.w800,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w900,
+                                          color: theme.colorScheme.primary,
                                         ),
                                       ),
-                                    Text(
-                                      '\$${item.price.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: isOut
-                                            ? theme.hintColor
-                                            : const Color(0xFF2563EB),
-                                        fontWeight: FontWeight.w900,
-                                      ),
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '\$${item.price.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 12,
+                                          color: isOut
+                                              ? theme.hintColor
+                                              : theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                      if (item.trackStock)
+                                        Text(
+                                          isOut
+                                              ? 'OUT'
+                                              : '${item.stockQuantity}',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: isOut
+                                                ? Colors.red
+                                                : theme.hintColor,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),

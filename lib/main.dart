@@ -12,13 +12,13 @@ import 'ui/webhost/web_host_home.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  
-  runApp(ProviderScope(
-    overrides: [
-      sharedPrefsProvider.overrideWithValue(prefs),
-    ],
-    child: const MyApp(),
-  ));
+
+  runApp(
+    ProviderScope(
+      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends ConsumerWidget {
@@ -31,182 +31,136 @@ class MyApp extends ConsumerWidget {
 
     ThemeData buildTheme(Brightness brightness) {
       final isDark = brightness == Brightness.dark;
-      final baseTextTheme = Typography.material2021().black.apply(
-        fontFamily: '-apple-system',
-        bodyColor: isDark ? Colors.white : const Color(0xFF111111),
-        displayColor: isDark ? Colors.white : const Color(0xFF111111),
-      );
+      final baseTextTheme = (isDark ? ThemeData.dark() : ThemeData.light())
+          .textTheme
+          .apply(
+            fontFamily: 'Lexend',
+            bodyColor: isDark
+                ? const Color(0xFFF1F5F9)
+                : const Color(0xFF0F172A),
+            displayColor: isDark
+                ? const Color(0xFFF8FAFC)
+                : const Color(0xFF0F172A),
+          );
 
       return ThemeData(
         useMaterial3: true,
         brightness: brightness,
-        scaffoldBackgroundColor: isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF9F8F6),
-        cardColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-        dividerColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC),
-        
-        // Custom Typography with tight letter spacing
+        fontFamily: 'Lexend',
+        scaffoldBackgroundColor: isDark
+            ? const Color(0xFF020617)
+            : const Color(0xFFF8FAFC),
+        cardColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        dividerColor: isDark
+            ? const Color(0xFF1E293B)
+            : const Color(0xFFE2E8F0),
+
         textTheme: baseTextTheme.copyWith(
-          bodyLarge: baseTextTheme.bodyLarge?.copyWith(letterSpacing: -0.2),
-          bodyMedium: baseTextTheme.bodyMedium?.copyWith(letterSpacing: -0.2),
-          titleLarge: baseTextTheme.titleLarge?.copyWith(letterSpacing: -0.4, fontWeight: FontWeight.w800),
-          labelLarge: baseTextTheme.labelLarge?.copyWith(letterSpacing: -0.1, fontWeight: FontWeight.w700),
-        ),
-
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          brightness: brightness,
-          surface: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-          outline: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC),
-        ),
-
-        // Sweeps & unified corner radius for a cohesive, modern feel
-        pageTransitionsTheme: PageTransitionsTheme(
-          builders: {
-            for (final platform in TargetPlatform.values)
-              platform: const FadeUpwardsPageTransitionsBuilder(),
-          },
-        ),
-        splashFactory: InkSparkle.splashFactory,
-        visualDensity: VisualDensity.standard,
-
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-          hintStyle: TextStyle(fontWeight: FontWeight.normal, color: isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF)),
-          labelStyle: TextStyle(fontWeight: FontWeight.w700, color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280)),
-          floatingLabelStyle: TextStyle(fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111111)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC)),
+          bodyLarge: baseTextTheme.bodyLarge?.copyWith(letterSpacing: -0.1),
+          bodyMedium: baseTextTheme.bodyMedium?.copyWith(letterSpacing: -0.1),
+          titleLarge: baseTextTheme.titleLarge?.copyWith(
+            letterSpacing: -0.5,
+            fontWeight: FontWeight.w800,
+            fontSize: 22,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: isDark ? const Color(0xFF2563EB) : const Color(0xFF2563EB), width: 1.5),
-          ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-
-        dividerTheme: DividerThemeData(
-          color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC),
-          thickness: 1,
-          space: 1,
-        ),
-
-        dialogTheme: DialogThemeData(
-          backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC)),
-          ),
-        ),
-
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111111),
-          contentTextStyle: TextStyle(
-            color: isDark ? const Color(0xFF111111) : Colors.white,
-            fontWeight: FontWeight.w700,
+          labelLarge: baseTextTheme.labelLarge?.copyWith(
             letterSpacing: 0.2,
-          ),
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-
-        chipTheme: ChipThemeData(
-          backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-          selectedColor: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111111),
-          side: BorderSide(color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          labelStyle: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF111111),
-          ),
-        ),
-
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 0,
-            backgroundColor: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111111),
-            foregroundColor: isDark ? const Color(0xFF111111) : Colors.white,
-            disabledBackgroundColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E5E5),
-            disabledForegroundColor: isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5),
-          ),
-        ),
-
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: isDark ? const Color(0xFFE5E7EB) : const Color(0xFF444444),
-            textStyle: const TextStyle(fontWeight: FontWeight.w800),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-
-        switchTheme: SwitchThemeData(
-          thumbColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return isDark ? const Color(0xFF111111) : Colors.white;
-            }
-            return isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF);
-          }),
-          trackColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return isDark ? const Color(0xFF22C55E) : const Color(0xFF22C55E);
-            }
-            return isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC);
-          }),
-        ),
-
-        progressIndicatorTheme: ProgressIndicatorThemeData(
-          color: isDark ? const Color(0xFF2563EB) : const Color(0xFF2563EB),
-          linearTrackColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC),
-        ),
-
-        tooltipTheme: TooltipThemeData(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          textStyle: TextStyle(
-            color: isDark ? const Color(0xFF111111) : Colors.white,
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
         ),
 
-        bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF9F8F6),
-          selectedItemColor: isDark ? Colors.white : const Color(0xFF111111),
-          unselectedItemColor: isDark ? const Color(0xFF6B7280) : const Color(0xFF999999),
-          elevation: 0,
-          type: BottomNavigationBarType.fixed,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3B82F6),
+          brightness: brightness,
+          surface: isDark ? const Color(0xFF0F172A) : Colors.white,
+          outline: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+          primary: const Color(0xFF3B82F6),
         ),
 
-        // Structured component styles
+        appBarTheme: AppBarTheme(
+          backgroundColor: isDark
+              ? const Color(0xFF020617)
+              : const Color(0xFFF8FAFC),
+          foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: const TextStyle(
+            fontFamily: 'Lexend',
+            color: Colors
+                .white, // Will be overridden by buildTheme usage if needed
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          hintStyle: TextStyle(
+            fontWeight: FontWeight.normal,
+            color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+          ),
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            backgroundColor: isDark
+                ? const Color(0xFFF8FAFC)
+                : const Color(0xFF0F172A),
+            foregroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+
         cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E2DC), width: 1),
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            ),
           ),
-          color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
         ),
-        
-        appBarTheme: AppBarTheme(
-          backgroundColor: isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF9F8F6),
-          foregroundColor: isDark ? Colors.white : const Color(0xFF111111),
-          elevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF111111),
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.4,
+
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: isDark
+              ? const Color(0xFFF8FAFC)
+              : const Color(0xFF0F172A),
+          contentTextStyle: const TextStyle(
+            fontFamily: 'Lexend',
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
       );
@@ -218,18 +172,19 @@ class MyApp extends ConsumerWidget {
     final kitchenTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF030712),
-      cardColor: const Color(0xFF1F2937),
+      fontFamily: 'Lexend',
+      scaffoldBackgroundColor: const Color(0xFF020617),
+      cardColor: const Color(0xFF0F172A),
       colorScheme: const ColorScheme.dark(
-        primary: Color(0xFF22C55E),
-        surface: Color(0xFF1F2937),
-        background: Color(0xFF030712),
+        primary: Color(0xFF10B981),
+        surface: Color(0xFF0F172A),
       ),
-      cardTheme: const CardThemeData(
-        color: Color(0xFF1F2937),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF0F172A),
         elevation: 0,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: Color(0xFF374151), width: 1),
+          side: const BorderSide(color: Color(0xFF1E293B), width: 1),
+          borderRadius: BorderRadius.circular(16),
         ),
       ),
     );
@@ -239,7 +194,9 @@ class MyApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: role == DeviceRole.client ? kitchenTheme : hostLightTheme,
       darkTheme: role == DeviceRole.client ? kitchenTheme : hostDarkTheme,
-      themeMode: role == DeviceRole.client ? ThemeMode.dark : settings.themeMode,
+      themeMode: role == DeviceRole.client
+          ? ThemeMode.dark
+          : settings.themeMode,
       home: _getHome(role),
     );
   }

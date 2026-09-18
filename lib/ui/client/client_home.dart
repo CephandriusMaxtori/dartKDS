@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:confetti/confetti.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -425,12 +426,12 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     String stationTag,
   ) {
     return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutBack,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.elasticOut,
       tween: Tween(begin: 0.0, end: 1.0),
       builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(50 * (1 - value), 0),
+        return Transform.scale(
+          scale: 0.8 + (0.2 * value),
           child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
         );
       },
@@ -474,6 +475,16 @@ class _ClientHomeState extends ConsumerState<ClientHome>
               child: Text('STATION: ${stationTag.toUpperCase()}'),
             ),
             const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => _showScannerDialog(context),
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: const Text('SCAN QR CODE'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF22C55E),
+                foregroundColor: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () {
                 setState(() => _isConnected = false);
@@ -503,6 +514,72 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                 style: TextStyle(
                   color: Color(0xFF6B7280),
                   fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showScannerDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'SCAN PAIRING CODE',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              onDetect: (capture) {
+                final List<Barcode> barcodes = capture.barcodes;
+                for (final barcode in barcodes) {
+                  final String? code = barcode.rawValue;
+                  if (code != null && code.startsWith('dartkds://connect')) {
+                    final uri = Uri.parse(code);
+                    final ip = uri.queryParameters['ip'];
+                    final port =
+                        int.tryParse(uri.queryParameters['port'] ?? '8080') ??
+                        8080;
+
+                    if (ip != null) {
+                      Navigator.pop(context);
+                      _connectToHost(ip, port, manual: true);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Pairing with $ip...'),
+                          backgroundColor: const Color(0xFF22C55E),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+                }
+              },
+            ),
+            Center(
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white54, width: 2),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
             ),
@@ -779,42 +856,42 @@ class _ClientHomeState extends ConsumerState<ClientHome>
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.campaign_rounded, color: Colors.white, size: 80),
-            const SizedBox(height: 24),
-            const Text(
-              'NOTIFICATION',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 24,
-                letterSpacing: 1.5,
+              const SizedBox(height: 24),
+              const Text(
+                'NOTIFICATION',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                  letterSpacing: 1.5,
+                ),
               ),
-            ),
-            if (station != null && station.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              if (station != null && station.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'TO STATION: ${station.toUpperCase()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
               Text(
-                'TO STATION: ${station.toUpperCase()}',
+                message.toUpperCase(),
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  letterSpacing: 1,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
                 ),
               ),
             ],
-            const SizedBox(height: 16),
-            Text(
-              message.toUpperCase(),
-              textAlign: TextAlign.center,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
-              ),
-            ),
-          ],
-        ),
+          ),
         ),
         actions: [
           Center(
@@ -842,8 +919,10 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('SWITCH DEVICE ROLE?',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        title: const Text(
+          'SWITCH DEVICE ROLE?',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+        ),
         content: const Text(
           'Return to the role selection screen?',
           style: TextStyle(fontSize: 14),
@@ -1235,65 +1314,111 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
 
     final borderOpacity = isLate ? pulse : 1.0;
 
-    return Material(
-      color: settings.clientHighContrast
-          ? Colors.black
-          : (settings.themeMode == ThemeMode.light
-                ? Colors.white
-                : const Color(0xFF1F2937)),
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        width: isTablet
-            ? null
-            : (isRushMode ? 240 : 290), // Flexible width on tablet
-        margin: isTablet
-            ? EdgeInsets.zero
-            : const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: settings.clientHighContrast
-                ? (elapsedMinutes >= 10
-                      ? const Color(0xFFDC2626).withOpacity(borderOpacity)
-                      : Colors.white)
-                : agingColor.withOpacity(borderOpacity),
-            width: settings.clientHighContrast ? 4 : 3,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: EdgeInsets.all(isRushMode ? 8 : 12),
-              decoration: BoxDecoration(
-                color: agingColor.withOpacity(0.1),
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark
-                        ? const Color(0xFF374151)
-                        : Colors.grey.shade300,
-                  ),
-                ),
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 150),
+      scale: 1.0,
+      child: Material(
+        color: settings.clientHighContrast
+            ? Colors.black
+            : (settings.themeMode == ThemeMode.light
+                  ? Colors.white
+                  : const Color(0xFF0F172A)),
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          width: isTablet
+              ? null
+              : (isRushMode ? 240 : 290), // Flexible width on tablet
+          margin: isTablet
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: settings.clientHighContrast
+                  ? (elapsedMinutes >= 10
+                        ? const Color(0xFFDC2626).withOpacity(borderOpacity)
+                        : Colors.white)
+                  : agingColor.withOpacity(borderOpacity),
+              width: settings.clientHighContrast ? 4 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      '#${order.uuid.substring(0, 4).toUpperCase()}${isRushMode ? "" : " • ${order.customerName.toUpperCase()}"}',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontSize: isRushMode ? 18 : 22,
-                        fontWeight: FontWeight.w900,
-                      ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Urgency Bar
+              Container(height: 6, color: agingColor),
+              Container(
+                padding: EdgeInsets.all(isRushMode ? 8 : 12),
+                decoration: BoxDecoration(
+                  color: agingColor.withOpacity(0.05),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : Colors.grey.shade200,
                     ),
                   ),
-                  Text(
-                    '${elapsedMinutes.clamp(0, 999)}m',
-                    style: TextStyle(
-                      color: agingColor,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (order.customerName.startsWith('SQ:'))
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'SQ',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              '#${order.uuid.substring(0, 4).toUpperCase()}${isRushMode ? "" : " • ${order.customerName.replaceFirst('SQ: ', '').toUpperCase()}"}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                fontSize: isRushMode ? 16 : 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${elapsedMinutes.clamp(0, 999)}m',
+                      style: TextStyle(
+                        color: agingColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
@@ -1364,9 +1489,9 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                                     style: TextStyle(
                                       color: isDark
                                           ? Colors.white
-                                          : Colors.black87,
+                                          : const Color(0xFF0F172A),
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                       decoration: item.isBumped
                                           ? TextDecoration.lineThrough
                                           : null,

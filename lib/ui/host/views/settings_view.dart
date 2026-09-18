@@ -1,6 +1,7 @@
 import 'dart:io' if (dart.library.js_interop) '../../../web_io_stub.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/service_providers.dart';
@@ -23,38 +24,75 @@ class SettingsView extends ConsumerWidget {
         _buildSectionHeader('CONNECTED CLIENTS'),
         _buildCard(
           theme,
-          clientsAsync.when(
-            data: (clients) {
-              if (clients.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      Icon(Icons.tablet_android, color: Color(0xFF6B7280)),
-                      SizedBox(width: 12),
-                      Text('No kitchen displays connected', style: TextStyle(color: Color(0xFF6B7280))),
-                    ],
-                  ),
-                );
-              }
-              return Column(
-                children: clients.map((client) => ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
-                    child: const Icon(Icons.tablet_android, color: Colors.white, size: 18),
-                  ),
-                  title: Text(client.deviceName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Station: ${client.currentStation}'),
-                  trailing: TextButton(
-                    onPressed: () => _showReassignDialog(context, ref, client),
-                    child: const Text('REASSIGN'),
-                  ),
-                )).toList(),
-              );
-            },
-            loading: () => const LinearProgressIndicator(),
-            error: (e, s) => Text('Error loading clients: $e'),
+          Column(
+            children: [
+              clientsAsync.when(
+                data: (clients) {
+                  if (clients.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          Icon(Icons.tablet_android, color: Color(0xFF6B7280)),
+                          SizedBox(width: 12),
+                          Text(
+                            'No kitchen displays connected',
+                            style: TextStyle(color: Color(0xFF6B7280)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: clients
+                        .map(
+                          (client) => ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF22C55E),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.tablet_android,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                            title: Text(
+                              client.deviceName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text('Station: ${client.currentStation}'),
+                            trailing: TextButton(
+                              onPressed: () =>
+                                  _showReassignDialog(context, ref, client),
+                              child: const Text('REASSIGN'),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => Text('Error loading clients: $e'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.qr_code_2_rounded,
+                  color: Color(0xFF2563EB),
+                ),
+                title: const Text(
+                  'Pair New Device',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text('Show connection QR code'),
+                onTap: () => _showPairingQRCode(context, ref),
+              ),
+            ],
           ),
         ),
         _buildSectionHeader('NETWORK & BLUETOOTH'),
@@ -67,25 +105,46 @@ class SettingsView extends ConsumerWidget {
               final interfaces = snapshot.data!;
               return Column(
                 children: [
-                  ...interfaces.expand((i) => i.addresses).where((a) => a.type == InternetAddressType.IPv4).map((addr) => ListTile(
-                    leading: Icon(
-                      addr.address.startsWith('192.168.44') ? Icons.bluetooth_audio : Icons.wifi,
-                      color: const Color(0xFF2563EB),
-                    ),
-                    title: Text(addr.address, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                    subtitle: Text('Network Interface: ${addr.address.startsWith('192.168.44') ? "Bluetooth PAN" : "Local Network"}'),
-                  )),
+                  ...interfaces
+                      .expand((i) => i.addresses)
+                      .where((a) => a.type == InternetAddressType.IPv4)
+                      .map(
+                        (addr) => ListTile(
+                          leading: Icon(
+                            addr.address.startsWith('192.168.44')
+                                ? Icons.bluetooth_audio
+                                : Icons.wifi,
+                            color: const Color(0xFF2563EB),
+                          ),
+                          title: Text(
+                            addr.address,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Network Interface: ${addr.address.startsWith('192.168.44') ? "Bluetooth PAN" : "Local Network"}',
+                          ),
+                        ),
+                      ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.wifi_tethering),
-                    title: const Text('Wi-Fi Hotspot', style: TextStyle(fontWeight: FontWeight.bold)),
+                    title: const Text(
+                      'Wi-Fi Hotspot',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     subtitle: const Text('Share network via Wi-Fi Hotspot'),
                     trailing: const Icon(Icons.open_in_new, size: 18),
                     onTap: () => _openHotspotSettings(),
                   ),
                   ListTile(
                     leading: const Icon(Icons.settings_bluetooth),
-                    title: const Text('Bluetooth Tethering (PAN)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    title: const Text(
+                      'Bluetooth Tethering (PAN)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     subtitle: const Text('Share network via Bluetooth'),
                     trailing: const Icon(Icons.open_in_new, size: 18),
                     onTap: () => _openBluetoothSettings(),
@@ -101,7 +160,10 @@ class SettingsView extends ConsumerWidget {
           Column(
             children: [
               SwitchListTile(
-                title: const Text('Use 24-Hour Format', style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text(
+                  'Use 24-Hour Format',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: const Text('e.g. 14:30 instead of 2:30 PM'),
                 value: settings.use24HourFormat,
                 onChanged: (val) => notifier.setUse24HourFormat(val),
@@ -109,11 +171,17 @@ class SettingsView extends ConsumerWidget {
               ),
               const Divider(height: 1),
               SwitchListTile(
-                title: const Text('Enable Confetti', style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text(
+                  'Enable Confetti',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: const Text('Show animations on order completion'),
                 value: settings.enableConfetti,
                 onChanged: (val) => notifier.setEnableConfetti(val),
-                secondary: const Icon(Icons.celebration_rounded, color: Color(0xFF2563EB)),
+                secondary: const Icon(
+                  Icons.celebration_rounded,
+                  color: Color(0xFF2563EB),
+                ),
               ),
             ],
           ),
@@ -123,7 +191,10 @@ class SettingsView extends ConsumerWidget {
           theme,
           ListTile(
             leading: const Icon(Icons.brightness_6_rounded),
-            title: const Text('Appearance', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text(
+              'Appearance',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             subtitle: Text(settings.themeMode.name.toUpperCase()),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showThemePicker(context, ref),
@@ -150,7 +221,10 @@ class SettingsView extends ConsumerWidget {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.refresh, color: Color(0xFFDC2626)),
-                title: const Text('Reset Application', style: TextStyle(color: Color(0xFFDC2626))),
+                title: const Text(
+                  'Reset Application',
+                  style: TextStyle(color: Color(0xFFDC2626)),
+                ),
                 subtitle: const Text('Clear all orders and library data'),
                 onTap: () => _showResetConfirmation(context, ref),
               ),
@@ -194,9 +268,113 @@ class SettingsView extends ConsumerWidget {
     );
   }
 
-  void _showReassignDialog(BuildContext context, WidgetRef ref, ConnectedClient client) {
+  void _showPairingQRCode(BuildContext context, WidgetRef ref) async {
+    final interfaces = await NetworkInterface.list();
+    final ips = interfaces
+        .expand((i) => i.addresses)
+        .where((a) => a.type == InternetAddressType.IPv4)
+        .map((a) => a.address)
+        .toList();
+
+    if (ips.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No network connection found')),
+        );
+      }
+      return;
+    }
+
+    String selectedIp = ips.first;
+
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final pairingUrl = 'dartkds://connect?ip=$selectedIp&port=8080';
+            return AlertDialog(
+              title: const Text(
+                'PAIR NEW DEVICE',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Scan this QR code from the KDS client to pair automatically.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: QrImageView(
+                      data: pairingUrl,
+                      version: QrVersions.auto,
+                      size: 200.0,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (ips.length > 1) ...[
+                    const Text(
+                      'Select Host IP:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    DropdownButton<String>(
+                      value: selectedIp,
+                      isExpanded: true,
+                      items: ips
+                          .map(
+                            (ip) => DropdownMenuItem(
+                              value: ip,
+                              child: Text(
+                                ip,
+                                style: const TextStyle(fontFamily: 'monospace'),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setDialogState(() => selectedIp = val!),
+                    ),
+                  ] else
+                    Text(
+                      'HOST IP: $selectedIp',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('CLOSE'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+  }
+
+  void _showReassignDialog(
+    BuildContext context,
+    WidgetRef ref,
+    ConnectedClient client,
+  ) {
     final db = ref.read(databaseProvider);
-    
+
     showDialog(
       context: context,
       builder: (context) => StreamBuilder<List<StationData>>(
@@ -207,16 +385,20 @@ class SettingsView extends ConsumerWidget {
             title: Text('Reassign ${client.deviceName}'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
-              children: stations.map((s) => ListTile(
-                title: Text(s.name),
-                onTap: () {
-                  ref.read(hostServerProvider).sendToClient(client.id, {
-                    'type': 'SetStation',
-                    'station': s.name,
-                  });
-                  Navigator.pop(context);
-                },
-              )).toList(),
+              children: stations
+                  .map(
+                    (s) => ListTile(
+                      title: Text(s.name),
+                      onTap: () {
+                        ref.read(hostServerProvider).sendToClient(client.id, {
+                          'type': 'SetStation',
+                          'station': s.name,
+                        });
+                        Navigator.pop(context);
+                      },
+                    ),
+                  )
+                  .toList(),
             ),
           );
         },
@@ -225,7 +407,8 @@ class SettingsView extends ConsumerWidget {
   }
 
   Future<void> _openHotspotSettings() async {
-    const String url = 'intent:#Intent;action=android.settings.WIFI_TETHER_SETTINGS;end';
+    const String url =
+        'intent:#Intent;action=android.settings.WIFI_TETHER_SETTINGS;end';
     try {
       await launchUrl(Uri.parse(url));
     } catch (_) {
@@ -234,7 +417,8 @@ class SettingsView extends ConsumerWidget {
   }
 
   Future<void> _openBluetoothSettings() async {
-    const String url = 'intent:#Intent;action=android.settings.TETHER_SETTINGS;end';
+    const String url =
+        'intent:#Intent;action=android.settings.TETHER_SETTINGS;end';
     try {
       await launchUrl(Uri.parse(url));
     } catch (_) {
@@ -258,12 +442,41 @@ class SettingsView extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(24, 20, 24, 12),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('APPEARANCE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2, color: Color(0xFF6B7280))),
+                child: Text(
+                  'APPEARANCE',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 1.2,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
               ),
             ),
-            _themeTile(context, ref, 'Light Mode', Icons.light_mode_outlined, ThemeMode.light, settings.themeMode),
-            _themeTile(context, ref, 'Dark Mode', Icons.dark_mode_outlined, ThemeMode.dark, settings.themeMode),
-            _themeTile(context, ref, 'System Default', Icons.settings_suggest_outlined, ThemeMode.system, settings.themeMode),
+            _themeTile(
+              context,
+              ref,
+              'Light Mode',
+              Icons.light_mode_outlined,
+              ThemeMode.light,
+              settings.themeMode,
+            ),
+            _themeTile(
+              context,
+              ref,
+              'Dark Mode',
+              Icons.dark_mode_outlined,
+              ThemeMode.dark,
+              settings.themeMode,
+            ),
+            _themeTile(
+              context,
+              ref,
+              'System Default',
+              Icons.settings_suggest_outlined,
+              ThemeMode.system,
+              settings.themeMode,
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -271,13 +484,26 @@ class SettingsView extends ConsumerWidget {
     );
   }
 
-  Widget _themeTile(BuildContext context, WidgetRef ref, String label, IconData icon, ThemeMode mode, ThemeMode current) {
+  Widget _themeTile(
+    BuildContext context,
+    WidgetRef ref,
+    String label,
+    IconData icon,
+    ThemeMode mode,
+    ThemeMode current,
+  ) {
     final selected = current == mode;
     return ListTile(
-      leading: Icon(icon, color: selected ? Theme.of(context).colorScheme.primary : null),
+      leading: Icon(
+        icon,
+        color: selected ? Theme.of(context).colorScheme.primary : null,
+      ),
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
       trailing: selected
-          ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary)
+          ? Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.primary,
+            )
           : const Icon(Icons.radio_button_unchecked, color: Color(0xFFB0B0B0)),
       onTap: () {
         ref.read(settingsProvider.notifier).setThemeMode(mode);
@@ -294,17 +520,35 @@ class SettingsView extends ConsumerWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
             SizedBox(width: 10),
-            Text('Reset Everything?', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            Text(
+              'Reset Everything?',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            ),
           ],
         ),
-        content: const Text('This will permanently delete all menu items and your order history. This cannot be undone.', style: TextStyle(color: Color(0xFF6B7280))),
+        content: const Text(
+          'This will permanently delete all menu items and your order history. This cannot be undone.',
+          style: TextStyle(color: Color(0xFF6B7280)),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL', style: TextStyle(fontWeight: FontWeight.w800))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
             },
-            child: const Text('RESET', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w900)),
+            child: const Text(
+              'RESET',
+              style: TextStyle(
+                color: Color(0xFFDC2626),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
         ],
       ),
