@@ -154,6 +154,23 @@ class SettingsView extends ConsumerWidget {
             },
           ),
         ),
+        _buildSectionHeader('DISPLAY'),
+        _buildCard(
+          theme,
+          SwitchListTile(
+            title: const Text(
+              'Keep Screen On',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: const Text('Prevent the host screen from sleeping'),
+            value: settings.keepScreenOn,
+            onChanged: (val) => notifier.setKeepScreenOn(val),
+            secondary: const Icon(
+              Icons.wb_sunny_rounded,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+        ),
         _buildSectionHeader('FORMAT'),
         _buildCard(
           theme,

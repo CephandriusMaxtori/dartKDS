@@ -13,6 +13,9 @@ class AppSettings {
   final bool clientHighContrast;
   final bool enableConfetti;
 
+  // Host specific settings
+  final bool keepScreenOn;
+
   AppSettings({
     this.themeMode = ThemeMode.light,
     this.use24HourFormat = false,
@@ -21,6 +24,7 @@ class AppSettings {
     this.clientVolume = 1.0,
     this.clientHighContrast = false,
     this.enableConfetti = true,
+    this.keepScreenOn = false,
   });
 
   AppSettings copyWith({
@@ -31,6 +35,7 @@ class AppSettings {
     double? clientVolume,
     bool? clientHighContrast,
     bool? enableConfetti,
+    bool? keepScreenOn,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -40,6 +45,7 @@ class AppSettings {
       clientVolume: clientVolume ?? this.clientVolume,
       clientHighContrast: clientHighContrast ?? this.clientHighContrast,
       enableConfetti: enableConfetti ?? this.enableConfetti,
+      keepScreenOn: keepScreenOn ?? this.keepScreenOn,
     );
   }
 }
@@ -59,6 +65,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final volume = prefs.getDouble('clientVolume') ?? 1.0;
     final highContrast = prefs.getBool('clientHighContrast') ?? false;
     final confetti = prefs.getBool('enableConfetti') ?? true;
+    final keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
 
     state = AppSettings(
       themeMode: ThemeMode.values[themeIndex],
@@ -68,6 +75,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       clientVolume: volume,
       clientHighContrast: highContrast,
       enableConfetti: confetti,
+      keepScreenOn: keepScreenOn,
     );
   }
 
@@ -104,6 +112,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setEnableConfetti(bool value) async {
     state = state.copyWith(enableConfetti: value);
     await prefs.setBool('enableConfetti', value);
+  }
+
+  Future<void> setKeepScreenOn(bool value) async {
+    state = state.copyWith(keepScreenOn: value);
+    await prefs.setBool('keepScreenOn', value);
   }
 }
 

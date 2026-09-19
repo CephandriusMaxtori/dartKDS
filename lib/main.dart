@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'providers/app_state_providers.dart';
 import 'providers/settings_provider.dart';
 import 'ui/host/host_home.dart';
@@ -85,10 +86,9 @@ class MyApp extends ConsumerWidget {
           foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
           elevation: 0,
           centerTitle: false,
-          titleTextStyle: const TextStyle(
+          titleTextStyle: TextStyle(
             fontFamily: 'Lexend',
-            color: Colors
-                .white, // Will be overridden by buildTheme usage if needed
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
             fontSize: 18,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
@@ -154,13 +154,37 @@ class MyApp extends ConsumerWidget {
           backgroundColor: isDark
               ? const Color(0xFFF8FAFC)
               : const Color(0xFF0F172A),
-          contentTextStyle: const TextStyle(
+          contentTextStyle: TextStyle(
             fontFamily: 'Lexend',
-            color: Colors.white,
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
             fontWeight: FontWeight.w600,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          elevation: 0,
+          selectedItemColor: isDark
+              ? const Color(0xFFF8FAFC)
+              : const Color(0xFF3B82F6),
+          unselectedItemColor: isDark
+              ? const Color(0xFF94A3B8)
+              : const Color(0xFF64748B),
+          selectedLabelStyle: const TextStyle(
+            fontFamily: 'Lexend',
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+            letterSpacing: 0.2,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontFamily: 'Lexend',
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+            letterSpacing: 0.2,
           ),
         ),
       );
@@ -197,6 +221,8 @@ class MyApp extends ConsumerWidget {
       themeMode: role == DeviceRole.client
           ? ThemeMode.dark
           : settings.themeMode,
+      builder: (context, child) =>
+          _WakelockSync(child: child ?? const SizedBox.shrink()),
       home: _getHome(role),
     );
   }
@@ -214,5 +240,49 @@ class MyApp extends ConsumerWidget {
       default:
         return const RoleSelectionScreen();
     }
+  }
+}
+
+/// Keeps the host device's screen awake while the "Keep Screen On" setting is
+/// enabled (POS/host mode). Wakelock is released when the setting is off or the
+/// app is disposed.
+class _WakelockSync extends ConsumerStatefulWidget {
+  final Widget child;
+  const _WakelockSync({required this.child});
+
+  @override
+  ConsumerState<_WakelockSync> createState() => _WakelockSyncState();
+}
+
+class _WakelockSyncState extends ConsumerState<_WakelockSync> {
+  bool _active = false;
+
+  Future<void> _sync(bool shouldStayOn) async {
+    if (shouldStayOn == _active) return;
+    _active = shouldStayOn;
+    try {
+      if (shouldStayOn) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (_) {
+      // Wakelock may be unavailable (e.g. browser without Screen Wake Lock).
+    }
+  }
+
+  @override
+  void dispose() {
+    WakelockPlus.disable();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final role = ref.watch(deviceRoleProvider);
+    final keepOn = ref.watch(settingsProvider.select((s) => s.keepScreenOn));
+    final shouldStayOn = keepOn && role == DeviceRole.host;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sync(shouldStayOn));
+    return widget.child;
   }
 }

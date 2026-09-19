@@ -32,7 +32,16 @@ Future<void> main() async {
 
   final files = <File>[];
   await for (final entity in src.list(recursive: true)) {
-    if (entity is File) files.add(entity);
+    if (entity is File) {
+      final rel = entity.path
+          .substring(src.path.length + 1)
+          .replaceAll(Platform.pathSeparator, '/');
+      // The web build copies the pubspec `assets/webui.bin` (the previously
+      // bundled UI) into build/web. Skip it, otherwise the bundle would embed
+      // itself and double in size on every build.
+      if (rel == 'assets/assets/webui.bin') continue;
+      files.add(entity);
+    }
   }
   files.sort((a, b) => a.path.compareTo(b.path));
 
