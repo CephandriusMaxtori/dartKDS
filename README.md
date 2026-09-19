@@ -1,7 +1,7 @@
 # DartKDS
 ### The Open Source, Offline Kitchen Display System
 
-![DartKDS Logo](file:///C:/Users/29bragann/StudioProjects/dartKDS/DartKDS.png)
+![DartKDS Logo](DartKDS.png)
 
 DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed for restaurants, food trucks, and pop-up kitchens. It replaces messy paper tickets with real-time digital screens that work entirely over your local network.
 
@@ -13,7 +13,7 @@ DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed 
 
 | Order Intake (Host) | Kitchen Display (Client) |
 | :---: | :---: |
-| ![Intake](file:///C:/Users/29bragann/StudioProjects/dartKDS/flutter_01.png) | ![KDS](file:///C:/Users/29bragann/StudioProjects/dartKDS/DartKDS.png) |
+| ![Intake](flutter_01.png) | ![KDS](DartKDS.png) |
 | *Modern, intuitive order entry* | *High-contrast, actionable prep lists* |
 
 ---
@@ -28,6 +28,8 @@ DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed 
 - 🌐 **Browser Support** — Access the kitchen view from any device with a web browser.
 - 💾 **Local Resilience** — Orders are stored on-device using a high-performance SQLite database.
 - 🌓 **Adaptive UI** — Light mode for Front-of-House and a high-contrast Dark Mode for the Kitchen.
+- 🔋 **Keep Screen On** — Prevent the host display from sleeping during service (optional).
+- 🔔 **Kitchen Broadcasts** — Push alerts (86s, rush notices, etc.) straight to station screens.
 
 ---
 
@@ -63,9 +65,14 @@ dart run build_runner build --delete-conflicting-outputs
 ```
 
 ### Building for Android
-We've included a helper script to build the APK and bundle the Web UI automatically:
+We've included a helper script that builds the Web UI bundle and produces per-ABI release APKs:
 ```bash
-python build.py --release
+python build.py            # full release build (web UI + all ABI APKs)
+python build.py --apk-only # APK-only if the Web UI is already bundled
+# or run the steps manually:
+#   flutter build web --no-web-resources-cdn
+#   dart run scripts/bundle_webui.dart
+#   flutter build apk --release --split-per-abi
 ```
 
 ---
