@@ -441,14 +441,14 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.local_bar_rounded,
+                      Icon(
+                        Icons.receipt_long_rounded,
                         size: 16,
-                        color: Color(0xFFF59E0B),
+                        color: theme.colorScheme.primary,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'OPEN BAR TABS (${openOrders.length})',
+                        'OPEN TABS (${openOrders.length})',
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 11,
@@ -564,10 +564,14 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                               label: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text(
-                                    '🍺 ',
-                                    style: TextStyle(fontSize: 12),
+                                  Icon(
+                                    Icons.person_outline_rounded,
+                                    size: 13,
+                                    color: isSelected
+                                        ? theme.colorScheme.primary
+                                        : theme.hintColor,
                                   ),
+                                  const SizedBox(width: 4),
                                   Text(
                                     '${order.customerName.toUpperCase()} · \$${orderTotal.toStringAsFixed(2)}',
                                     style: TextStyle(
@@ -607,12 +611,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.cardColor,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.local_bar_rounded, color: Color(0xFFF59E0B)),
-            SizedBox(width: 8),
-            Text(
-              'START BAR TAB',
+            Icon(Icons.bookmark_add_outlined, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            const Text(
+              'START NEW TAB',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             ),
           ],
@@ -627,7 +631,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               style: const TextStyle(fontWeight: FontWeight.w700),
               decoration: InputDecoration(
                 labelText: 'TAB / GUEST / TABLE NAME',
-                hintText: 'e.g. Alex, Table 4, Bar 2',
+                hintText: 'e.g. Table 4, Alex, Take Out',
                 filled: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -640,12 +644,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               runSpacing: 6,
               children:
                   [
-                    'BAR 1',
-                    'BAR 2',
-                    'BAR 3',
                     'TABLE 1',
                     'TABLE 2',
                     'TABLE 3',
+                    'TAKE OUT',
+                    'COUNTER',
+                    'DRIVE THRU',
                   ].map((label) {
                     return ActionChip(
                       label: Text(
@@ -705,7 +709,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           id: -1,
           guid: '',
           name: item.name,
-          category: 'Bar',
+          category: 'General',
           defaultStation: item.stationTag,
           modifiers: [],
           price: item.price,
@@ -745,9 +749,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     }
 
     final isEditingTab = intakeState.editingOrderUuid != null;
-    final tabName = intakeState.customerName.isEmpty
-        ? 'GUEST'
-        : intakeState.customerName.toUpperCase();
 
     final panelContent = Material(
       color: theme.cardColor,
@@ -757,17 +758,17 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: isEditingTab
-                  ? const Color(0xFFFACC15).withValues(alpha: 0.12)
+                  ? theme.colorScheme.primary.withValues(alpha: 0.1)
                   : theme.dividerColor.withValues(alpha: 0.1),
               border: Border(bottom: BorderSide(color: theme.dividerColor)),
             ),
             child: Row(
               children: [
                 Icon(
-                  Icons.local_bar_rounded,
+                  Icons.receipt_long_rounded,
                   size: 16,
                   color: isEditingTab
-                      ? const Color(0xFFD97706)
+                      ? theme.colorScheme.primary
                       : theme.hintColor,
                 ),
                 const SizedBox(width: 8),
@@ -804,15 +805,15 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFACC15).withValues(alpha: 0.2),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text(
+                    child: Text(
                       'OPEN TAB',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 10,
-                        color: Color(0xFFD97706),
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                   ),
@@ -966,7 +967,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                         ),
                         icon: const Icon(Icons.send_rounded, size: 16),
                         label: Text(
-                          isEditingTab ? 'SEND ROUND' : 'OPEN TAB & SEND',
+                          isEditingTab ? 'ADD TO TAB' : 'OPEN TAB & SEND',
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 11,
@@ -1697,7 +1698,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               ? 'Tab "$tabName" Closed & Paid!'
               : (isEditing
                     ? 'Tab "$tabName" Updated!'
-                    : 'Round Sent for Tab "$tabName"!'),
+                    : 'Sent to Kitchen for Tab "$tabName"!'),
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         backgroundColor: closeTab

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../models/database.dart';
-import '../../../models/item_status.dart';
 import '../../../models/order_status.dart';
 import '../../../providers/app_state_providers.dart';
 import '../../../providers/intake_provider.dart';
@@ -75,7 +74,7 @@ class SentQueueView extends ConsumerWidget {
                       openOrders,
                       timeFormat,
                       theme,
-                      'No Open Bar Tabs',
+                      'No Open Tabs',
                       'Active tabs waiting to be settled will appear here.',
                       isOpenTabSection: true,
                     ),
@@ -88,7 +87,7 @@ class SentQueueView extends ConsumerWidget {
                       timeFormat,
                       theme,
                       'No Closed Tabs',
-                      'Settled bar tabs will appear here.',
+                      'Settled customer tabs will appear here.',
                       isOpenTabSection: false,
                     ),
                     _buildOrderList(
@@ -99,8 +98,8 @@ class SentQueueView extends ConsumerWidget {
                       orders,
                       timeFormat,
                       theme,
-                      'No Bar Tabs Found',
-                      'Bar tabs will appear here.',
+                      'No Tabs Found',
+                      'Customer tabs will appear here.',
                       isOpenTabSection: false,
                     ),
                   ],
@@ -139,7 +138,7 @@ class SentQueueView extends ConsumerWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.local_bar_rounded,
+                Icons.receipt_long_rounded,
                 size: 56,
                 color: emptyColor.withValues(alpha: 0.6),
               ),
@@ -194,7 +193,12 @@ class SentQueueView extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        const Text('🍺 ', style: TextStyle(fontSize: 16)),
+                        Icon(
+                          Icons.person_outline_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
                         Text(
                           'TAB: ${order.customerName.toUpperCase()}',
                           style: TextStyle(
@@ -252,7 +256,7 @@ class SentQueueView extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  isOpen ? 'ADD ROUND' : 'EDIT',
+                                  isOpen ? 'ADD TO TAB' : 'EDIT',
                                   style: TextStyle(
                                     color: theme.colorScheme.primary,
                                     fontWeight: FontWeight.w900,
@@ -380,7 +384,7 @@ class SentQueueView extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'RUNNING TAB TOTAL',
+                              'TAB TOTAL',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 13,
@@ -468,7 +472,7 @@ class SentQueueView extends ConsumerWidget {
           id: -1,
           guid: '',
           name: item.name,
-          category: 'Bar',
+          category: 'General',
           defaultStation: item.stationTag,
           modifiers: [],
           price: item.price,
