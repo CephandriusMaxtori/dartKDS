@@ -1531,7 +1531,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
           ),
         ),
       ),
-    ));
+    );
   }
 
   Widget _buildFooter(List<ClientItem> items, bool isDark) {
