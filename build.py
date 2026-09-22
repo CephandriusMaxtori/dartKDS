@@ -34,6 +34,8 @@ def run(cmd):
             cwd=str(ROOT),
             bufsize=1,
             universal_newlines=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
