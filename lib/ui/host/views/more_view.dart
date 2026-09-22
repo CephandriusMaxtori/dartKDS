@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'sent_queue_view.dart';
 import 'settings_view.dart';
 import 'library_view.dart';
 import 'analytics_view.dart';
@@ -168,7 +167,7 @@ class MoreView extends ConsumerWidget {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  value: targetStation,
+                  initialValue: targetStation,
                   decoration: const InputDecoration(
                     labelText: 'TARGET STATION',
                     prefixIcon: Icon(Icons.dns_rounded, size: 18),
@@ -210,7 +209,7 @@ class MoreView extends ConsumerWidget {
                   final payload = jsonEncode({
                     'type': 'KitchenBroadcast',
                     'message': controller.text.trim(),
-                    if (targetStation != null) 'station': targetStation,
+                    'station': ?targetStation,
                   });
                   if (targetStation != null) {
                     ref
@@ -278,7 +277,7 @@ class MoreView extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
+                color: color.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(icon, color: color, size: 22),

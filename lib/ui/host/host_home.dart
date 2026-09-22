@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'views/order_intake_view.dart';
-import 'views/library_view.dart';
 import 'views/inventory_view.dart';
 import 'views/more_view.dart';
 import 'views/sent_queue_view.dart';
@@ -142,10 +141,10 @@ class _HostHomeState extends ConsumerState<HostHome> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF22C55E).withOpacity(0.12),
+                color: const Color(0xFF22C55E).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: const Color(0xFF22C55E).withOpacity(0.25),
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.25),
                 ),
               ),
               child: Row(
@@ -247,7 +246,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
                 scale: 0.7,
                 child: Switch(
                   value: ref.watch(rushModeProvider),
-                  activeColor: const Color(0xFFDC2626),
+                  activeThumbColor: const Color(0xFFDC2626),
                   onChanged: (val) {
                     ref.read(rushModeProvider.notifier).state = val;
                     ref

@@ -101,6 +101,11 @@ def main():
         return 1
 
     if not args.apk_only:
+        webui_asset = ROOT / "assets" / "webui.bin"
+        webui_asset.parent.mkdir(parents=True, exist_ok=True)
+        if not webui_asset.exists():
+            webui_asset.touch()
+
         if not args.skip_web:
             ensure_webui_placeholder()
             if run(["flutter", "build", "web", "--no-web-resources-cdn"]) != 0:

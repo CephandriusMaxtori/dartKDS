@@ -157,8 +157,11 @@ class InventoryView extends ConsumerWidget {
     return InkWell(
       onTap: () {
         HapticFeedback.lightImpact();
-        if (label == 'Zero') _updateStock(db, item, 0);
-        else _updateStock(db, item, item.stockQuantity + val);
+        if (label == 'Zero') {
+          _updateStock(db, item, 0);
+        } else {
+          _updateStock(db, item, item.stockQuantity + val);
+        }
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -226,7 +229,9 @@ class InventoryView extends ConsumerWidget {
     if (lowStockItems.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All items are in stock.'))); return; }
     final StringBuffer buffer = StringBuffer();
     buffer.writeln('SHOPPING LIST - ${DateTime.now().toString().substring(0, 16)}');
-    for (final item in lowStockItems) buffer.writeln('[ ] ${item.name.toUpperCase()} (${item.stockQuantity <= 0 ? "OUT" : item.stockQuantity})');
+    for (final item in lowStockItems) {
+      buffer.writeln('[ ] ${item.name.toUpperCase()} (${item.stockQuantity <= 0 ? "OUT" : item.stockQuantity})');
+    }
     await Share.share(buffer.toString(), subject: 'Kitchen Shopping List');
   }
 }

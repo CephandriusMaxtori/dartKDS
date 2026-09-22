@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io' if (dart.library.js_interop) '../web_io_stub.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/database.dart';
-import '../providers/app_state_providers.dart';
 import '../providers/service_providers.dart';
 import 'discovery_service.dart';
 import 'sync_engine.dart';
@@ -163,8 +162,5 @@ class SyncService {
 
 final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
   final syncService = ref.watch(syncServiceProvider);
-  if (syncService == null) {
-    return Stream.value(const SyncStatus());
-  }
   return syncService.statusStream;
 });

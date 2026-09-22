@@ -1171,7 +1171,7 @@ class HostServer {
 
     _startDbWatchers();
 
-    _server = await io.serve(router, InternetAddress.anyIPv4, port);
+    _server = await io.serve(router.call, InternetAddress.anyIPv4, port);
   }
 
   void setIdentity(String hostId, String role) {
@@ -1196,7 +1196,7 @@ class HostServer {
 
   String? _findWebUiDir() {
     final candidates = <String>[
-      if (webUiDir != null) webUiDir!,
+      ?webUiDir,
       if (_webUiDirOverride.isNotEmpty) _webUiDirOverride,
       if (Directory.current.path.isNotEmpty)
         '${Directory.current.path}${p.separator}build${p.separator}web',
@@ -1580,20 +1580,23 @@ class HostServer {
     // Extract customer name or use "Square Order"
     String customerName = 'Square Order';
     if (orderData['customer_id'] != null) {
-      customerName = 'SQ: ${orderData['customer_id'].toString().substring(0, 5)}';
+      customerName =
+          'SQ: ${orderData['customer_id'].toString().substring(0, 5)}';
     } else if (orderData['reference_id'] != null) {
       customerName = 'SQ: ${orderData['reference_id']}';
     }
 
-    await db.into(db.kDSOrders).insert(
-      KDSOrderData(
-        uuid: orderUuid,
-        customerName: customerName,
-        timestamp: timestamp,
-        status: OrderStatus.pending,
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
+    await db
+        .into(db.kDSOrders)
+        .insert(
+          KDSOrderData(
+            uuid: orderUuid,
+            customerName: customerName,
+            timestamp: timestamp,
+            status: OrderStatus.pending,
+            updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
 
     final List<Map<String, dynamic>> jsonItems = [];
     final lineItems = orderData['line_items'] as List? ?? [];
@@ -1601,7 +1604,9 @@ class HostServer {
     for (final li in lineItems) {
       final itemName = li['name'] ?? 'Unknown Item';
       final itemUuid = const Uuid().v4();
-      final price = ((li['base_price_money']?['amount'] as num?)?.toDouble() ?? 0.0) / 100.0; // Square cents to dollars
+      final price =
+          ((li['base_price_money']?['amount'] as num?)?.toDouble() ?? 0.0) /
+          100.0; // Square cents to dollars
 
       // Extract modifiers
       final List<String> mods = [];
@@ -1611,17 +1616,19 @@ class HostServer {
       }
 
       // Smart Routing: Match with local menu to get station
-      final menuMatches = await (db.select(db.menuItems)
-            ..where((t) => t.name.equals(itemName)))
-          .get();
+      final menuMatches = await (db.select(
+        db.menuItems,
+      )..where((t) => t.name.equals(itemName))).get();
       String stationTag = 'GENERAL';
       if (menuMatches.isNotEmpty) {
         stationTag = menuMatches.first.defaultStation;
-        
+
         // Handle stock if tracked
         if (menuMatches.first.trackStock) {
           final qty = int.tryParse(li['quantity'] ?? '1') ?? 1;
-          await (db.update(db.menuItems)..where((t) => t.id.equals(menuMatches.first.id))).write(
+          await (db.update(
+            db.menuItems,
+          )..where((t) => t.id.equals(menuMatches.first.id))).write(
             MenuItemsCompanion(
               stockQuantity: drift.Value(menuMatches.first.stockQuantity - qty),
               updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
@@ -1630,18 +1637,20 @@ class HostServer {
         }
       }
 
-      await db.into(db.kDSItems).insert(
-        KDSItemsCompanion.insert(
-          uuid: itemUuid,
-          orderUuid: orderUuid,
-          name: itemName,
-          modifiers: mods,
-          stationTag: stationTag,
-          status: ItemStatus.pending,
-          price: drift.Value(price),
-          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      await db
+          .into(db.kDSItems)
+          .insert(
+            KDSItemsCompanion.insert(
+              uuid: itemUuid,
+              orderUuid: orderUuid,
+              name: itemName,
+              modifiers: mods,
+              stationTag: stationTag,
+              status: ItemStatus.pending,
+              price: drift.Value(price),
+              updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+            ),
+          );
 
       jsonItems.add({
         'uuid': itemUuid,
@@ -1654,15 +1663,17 @@ class HostServer {
     }
 
     // Broadcast to all KDS clients
-    broadcast(jsonEncode({
-      'type': 'OrderCreated',
-      'order': {
-        'uuid': orderUuid,
-        'customerName': customerName,
-        'timestamp': timestamp.toIso8601String(),
-        'status': OrderStatus.pending.index,
-        'items': jsonItems,
-      },
-    }));
+    broadcast(
+      jsonEncode({
+        'type': 'OrderCreated',
+        'order': {
+          'uuid': orderUuid,
+          'customerName': customerName,
+          'timestamp': timestamp.toIso8601String(),
+          'status': OrderStatus.pending.index,
+          'items': jsonItems,
+        },
+      }),
+    );
   }
 }

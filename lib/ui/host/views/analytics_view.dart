@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../models/database.dart';
 import '../../../providers/service_providers.dart';
 
@@ -17,8 +16,9 @@ class AnalyticsView extends ConsumerWidget {
       body: StreamBuilder<List<ItemSalesStat>>(
         stream: db.getItemSalesStats(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           final stats = snapshot.data!;
           if (stats.isEmpty) {
@@ -29,7 +29,7 @@ class AnalyticsView extends ConsumerWidget {
                   Icon(
                     Icons.bar_chart_rounded,
                     size: 64,
-                    color: theme.hintColor.withOpacity(0.3),
+                    color: theme.hintColor.withValues(alpha: 0.3),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -267,16 +267,15 @@ class AnalyticsView extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 4),
               child: Text(
-                'Top Modifiers: ' +
-                    (stat.modifierCounts.entries.toList()
+                'Top Modifiers: ${(stat.modifierCounts.entries.toList()
                           ..sort((a, b) => b.value.compareTo(a.value)))
                         .take(2)
                         .map((e) => e.key)
-                        .join(', '),
+                        .join(', ')}',
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  color: theme.hintColor.withOpacity(0.7),
+                  color: theme.hintColor.withValues(alpha: 0.7),
                 ),
               ),
             ),

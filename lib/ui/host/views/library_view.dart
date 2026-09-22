@@ -55,12 +55,14 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     return StreamBuilder<List<StationData>>(
       stream: db.select(db.stations).watch(),
       builder: (context, stationSnapshot) {
-        if (stationSnapshot.hasError)
+        if (stationSnapshot.hasError) {
           return Center(
             child: Text('Database Error: ${stationSnapshot.error}'),
           );
-        if (!stationSnapshot.hasData)
+        }
+        if (!stationSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final stations = stationSnapshot.data ?? [];
         if (stations.isNotEmpty &&
@@ -130,10 +132,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     return StreamBuilder<List<MenuItemData>>(
       stream: db.select(db.menuItems).watch(),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final items = snapshot.data!;
 
         return CustomScrollView(
@@ -202,7 +206,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: _selectedStation,
+                        initialValue: _selectedStation,
                         decoration: _inputDecoration('Routing Station'),
                         items: stations
                             .map(
@@ -234,7 +238,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           value: _trackStock,
                           onChanged: (val) => setState(() => _trackStock = val),
-                          activeColor: const Color(0xFF111111),
+                          activeThumbColor: const Color(0xFF111111),
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                         ),
@@ -264,7 +268,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           value: _oneTouch,
                           onChanged: (val) => setState(() => _oneTouch = val),
-                          activeColor: const Color(0xFF2563EB),
+                          activeThumbColor: const Color(0xFF2563EB),
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                         ),
@@ -762,8 +766,9 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
           child: StreamBuilder<List<GlobalModifierData>>(
             stream: db.select(db.globalModifiers).watch(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final mods = snapshot.data!;
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1273,12 +1278,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                   ),
                   value: oneTouch,
                   onChanged: (val) => setDialogState(() => oneTouch = val),
-                  activeColor: const Color(0xFF2563EB),
+                  activeThumbColor: const Color(0xFF2563EB),
                   contentPadding: EdgeInsets.zero,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: stations.any((s) => s.name == selectedStation)
+                  initialValue: stations.any((s) => s.name == selectedStation)
                       ? selectedStation
                       : (stations.isNotEmpty ? stations.first.name : null),
                   decoration: _inputDecoration('Station'),

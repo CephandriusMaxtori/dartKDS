@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Ensure placeholder webui asset exists
+        run: mkdir -p assets && touch assets/webui.bin
+
       - name: Build Web UI (local canvaskit)
         run: flutter build web --no-web-resources-cdn
 

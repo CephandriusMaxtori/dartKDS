@@ -704,7 +704,9 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                         boxShadow: [
                           if (_isConnected)
                             BoxShadow(
-                              color: const Color(0xFF22C55E).withOpacity(0.5),
+                              color: const Color(
+                                0xFF22C55E,
+                              ).withValues(alpha: 0.5),
                               blurRadius: 4,
                               spreadRadius: 1,
                             ),
@@ -1028,7 +1030,7 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                       ),
                     ),
                     value: settings.clientHighContrast,
-                    activeColor: const Color(0xFF22C55E),
+                    activeThumbColor: const Color(0xFF22C55E),
                     onChanged: (val) => notifier.setClientHighContrast(val),
                   ),
                   SwitchListTile(
@@ -1041,7 +1043,7 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                       ),
                     ),
                     value: settings.enableConfetti,
-                    activeColor: const Color(0xFF22C55E),
+                    activeThumbColor: const Color(0xFF22C55E),
                     onChanged: (val) => notifier.setEnableConfetti(val),
                   ),
                   ListTile(
@@ -1142,8 +1144,8 @@ class _ClientHomeState extends ConsumerState<ClientHome>
 
   Widget _buildEmptyState(bool isDark) {
     final textColor = isDark
-        ? Colors.white.withOpacity(0.1)
-        : Colors.black.withOpacity(0.1);
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.1);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1298,9 +1300,9 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
     final pulse = ref.watch(globalPulseProvider).value ?? 1.0;
 
     Color agingColor;
-    if (elapsedMinutes < 5)
+    if (elapsedMinutes < 5) {
       agingColor = const Color(0xFF22C55E);
-    else if (elapsedMinutes < 10)
+    } else if (elapsedMinutes < 10)
       agingColor = const Color(0xFFFACC15);
     else
       agingColor = const Color(0xFFDC2626);
@@ -1337,14 +1339,16 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
             border: Border.all(
               color: settings.clientHighContrast
                   ? (elapsedMinutes >= 10
-                        ? const Color(0xFFDC2626).withOpacity(borderOpacity)
+                        ? const Color(
+                            0xFFDC2626,
+                          ).withValues(alpha: borderOpacity)
                         : Colors.white)
-                  : agingColor.withOpacity(borderOpacity),
+                  : agingColor.withValues(alpha: borderOpacity),
               width: settings.clientHighContrast ? 4 : 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1358,7 +1362,7 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
               Container(
                 padding: EdgeInsets.all(isRushMode ? 8 : 12),
                 decoration: BoxDecoration(
-                  color: agingColor.withOpacity(0.05),
+                  color: agingColor.withValues(alpha: 0.05),
                   border: Border(
                     bottom: BorderSide(
                       color: isDark
@@ -1398,7 +1402,9 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                               '#${order.uuid.substring(0, 4).toUpperCase()}${isRushMode ? "" : " • ${order.customerName.replaceFirst('SQ: ', '').toUpperCase()}"}',
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
                                 fontSize: isRushMode ? 16 : 20,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -1419,109 +1425,110 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                   ],
                 ),
               ),
-            Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: displayItems.length,
-                itemBuilder: (context, idx) {
-                  final item = displayItems[idx];
-                  return InkWell(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      final newValue = !item.isBumped;
-                      ref
-                          .read(clientServiceProvider)
-                          .send(
-                            jsonEncode({
-                              'type': 'ItemBumped',
-                              'orderUuid': order.uuid,
-                              'itemUuid': item.uuid,
-                              'isBumped': newValue,
-                            }),
-                          );
-                      ref
-                          .read(clientStateProvider.notifier)
-                          .toggleItemBump(order.uuid, item.uuid);
-                    },
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: item.isBumped ? 0.3 : 1.0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: isDark
-                                  ? const Color(0xFF374151)
-                                  : Colors.grey.shade200,
-                              width: 0.5,
+              Expanded(
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: displayItems.length,
+                  itemBuilder: (context, idx) {
+                    final item = displayItems[idx];
+                    return InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        final newValue = !item.isBumped;
+                        ref
+                            .read(clientServiceProvider)
+                            .send(
+                              jsonEncode({
+                                'type': 'ItemBumped',
+                                'orderUuid': order.uuid,
+                                'itemUuid': item.uuid,
+                                'isBumped': newValue,
+                              }),
+                            );
+                        ref
+                            .read(clientStateProvider.notifier)
+                            .toggleItemBump(order.uuid, item.uuid);
+                      },
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: item.isBumped ? 0.3 : 1.0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isDark
+                                    ? const Color(0xFF374151)
+                                    : Colors.grey.shade200,
+                                width: 0.5,
+                              ),
                             ),
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (item.isBumped)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 8.0),
-                                    child: Icon(
-                                      Icons.check_circle,
-                                      color: Color(0xFF22C55E),
-                                      size: 20,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  if (item.isBumped)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 8.0),
+                                      child: Icon(
+                                        Icons.check_circle,
+                                        color: Color(0xFF22C55E),
+                                        size: 20,
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: Text(
+                                      item.name.toUpperCase(),
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        decoration: item.isBumped
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
                                     ),
                                   ),
-                                Expanded(
-                                  child: Text(
-                                    item.name.toUpperCase(),
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? Colors.white
-                                          : const Color(0xFF0F172A),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      decoration: item.isBumped
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (item.modifiers.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(top: 4.0),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFACC15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  item.modifiers.join(', ').toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                                ],
                               ),
-                          ],
+                              if (item.modifiers.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 4.0),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFACC15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    item.modifiers.join(', ').toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-            _buildFooter(displayItems, isDark),
-          ],
+              _buildFooter(displayItems, isDark),
+            ],
+          ),
         ),
       ),
     ));
@@ -1545,8 +1552,9 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
           final finishedOrder = ref
               .read(clientStateProvider.notifier)
               .removeOrder(order.uuid);
-          if (finishedOrder != null)
+          if (finishedOrder != null) {
             ref.read(recentBumpsProvider.notifier).add(finishedOrder);
+          }
         } else {
           for (var item in items) {
             if (!item.isBumped) {

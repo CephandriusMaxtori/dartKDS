@@ -40,18 +40,16 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
   Future<void> _connect() async {
     final bridge = ref.read(webHostBridgeProvider);
     try {
-      await bridge.connect(
-        role: ref.read(hostIdentityProvider).role,
-      );
+      await bridge.connect(role: ref.read(hostIdentityProvider).role);
     } catch (_) {}
   }
 
   Future<void> _reconnect() async {
     _retryTimer?.cancel();
     try {
-      await ref.read(webHostBridgeProvider).connect(
-            role: ref.read(hostIdentityProvider).role,
-          );
+      await ref
+          .read(webHostBridgeProvider)
+          .connect(role: ref.read(hostIdentityProvider).role);
     } catch (_) {
       _retryTimer = Timer(const Duration(seconds: 5), _reconnect);
     }
@@ -78,8 +76,11 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
                 color: Theme.of(context).colorScheme.primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.restaurant_menu_rounded,
-                  color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.restaurant_menu_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('DARTKDS'),
@@ -126,14 +127,18 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: (connected
-                          ? _kGreen
-                          : connecting
+                  color:
+                      (connected
+                              ? _kGreen
+                              : connecting
                               ? _kAmber
                               : _kRed)
-                      .withValues(alpha: 0.12),
+                          .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -147,8 +152,8 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
                         color: connected
                             ? _kGreen
                             : connecting
-                                ? _kAmber
-                                : _kRed,
+                            ? _kAmber
+                            : _kRed,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -156,8 +161,8 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
                       connected
                           ? 'CONNECTED'
                           : connecting
-                              ? 'CONNECTING…'
-                              : 'OFFLINE',
+                          ? 'CONNECTING…'
+                          : 'OFFLINE',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w900,
@@ -165,8 +170,8 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
                         color: connected
                             ? _kGreen
                             : connecting
-                                ? _kAmber
-                                : _kRed,
+                            ? _kAmber
+                            : _kRed,
                       ),
                     ),
                   ],
@@ -243,8 +248,8 @@ class _WebHostHomeState extends ConsumerState<WebHostHome>
             connecting
                 ? 'CONNECTING TO HOST…'
                 : failed
-                    ? 'CONNECTION FAILED'
-                    : 'HOST OFFLINE',
+                ? 'CONNECTION FAILED'
+                : 'HOST OFFLINE',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
           ),
           const SizedBox(height: 8),
@@ -310,7 +315,10 @@ class _SectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-              fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1),
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            letterSpacing: 1.1,
+          ),
         ),
         if (count != null) ...[
           const SizedBox(width: 8),
@@ -320,8 +328,10 @@ class _SectionHeader extends StatelessWidget {
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text(count!,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+            child: Text(
+              count!,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ],
@@ -336,11 +346,15 @@ Widget _emptyState(IconData icon, String title, String subtitle) {
       children: [
         Icon(icon, size: 48, color: const Color(0xFF9CA3AF)),
         const SizedBox(height: 12),
-        Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+        ),
         const SizedBox(height: 4),
-        Text(subtitle,
-            style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+        Text(
+          subtitle,
+          style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+        ),
       ],
     ),
   );
@@ -427,8 +441,10 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
     setState(() => _cart.add(_CartLine(item, selection)));
   }
 
-  int get _subtotal =>
-      _cart.fold(0, (sum, l) => sum + (l.quantity * l.menuItem.price * 100).round());
+  int get _subtotal => _cart.fold(
+    0,
+    (sum, l) => sum + (l.quantity * l.menuItem.price * 100).round(),
+  );
 
   void _send() {
     final bridge = ref.read(webHostBridgeProvider);
@@ -465,10 +481,15 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
       _customerCtrl.clear();
       _editingOrderUuid = '';
     });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('ORDER SENT', style: TextStyle(fontWeight: FontWeight.w800)),
-      duration: Duration(seconds: 1),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'ORDER SENT',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        duration: Duration(seconds: 1),
+      ),
+    );
   }
 
   @override
@@ -534,8 +555,11 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
         const SizedBox(height: 6),
         Expanded(
           child: filtered.isEmpty
-              ? _emptyState(Icons.search_off_rounded, 'NO MATCHES',
-                  'Try a different search or category')
+              ? _emptyState(
+                  Icons.search_off_rounded,
+                  'NO MATCHES',
+                  'Try a different search or category',
+                )
               : Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1280),
@@ -543,11 +567,11 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                       padding: const EdgeInsets.all(10),
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 200,
-                        mainAxisExtent: 70,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
+                            maxCrossAxisExtent: 200,
+                            mainAxisExtent: 70,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
                       itemCount: filtered.length,
                       itemBuilder: (context, i) {
                         final item = filtered[i];
@@ -563,27 +587,30 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                    color: lowStock
-                                        ? _kRed.withValues(alpha: 0.5)
-                                        : Theme.of(context).dividerColor),
+                                  color: lowStock
+                                      ? _kRed.withValues(alpha: 0.5)
+                                      : Theme.of(context).dividerColor,
+                                ),
                               ),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               child: Stack(
                                 children: [
                                   Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
                                         item.name.toUpperCase(),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 14),
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 14,
+                                        ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
@@ -598,8 +625,8 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                                           color: lowStock
                                               ? _kRed
                                               : item.oneTouch
-                                                  ? _kBlue
-                                                  : Theme.of(context).hintColor,
+                                              ? _kBlue
+                                              : Theme.of(context).hintColor,
                                           fontWeight: lowStock
                                               ? FontWeight.w800
                                               : FontWeight.normal,
@@ -611,9 +638,11 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                                     Positioned(
                                       top: 0,
                                       right: 0,
-                                      child: Icon(Icons.tune_rounded,
-                                          size: 15,
-                                          color: _kPurple.withValues(alpha: 0.8)),
+                                      child: Icon(
+                                        Icons.tune_rounded,
+                                        size: 15,
+                                        color: _kPurple.withValues(alpha: 0.8),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -630,8 +659,12 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
     );
   }
 
-  Widget _catChip(String label, bool selected, VoidCallback onTap,
-      {required int count}) {
+  Widget _catChip(
+    String label,
+    bool selected,
+    VoidCallback onTap, {
+    required int count,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: ChoiceChip(
@@ -640,11 +673,14 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
           children: [
             Text(label),
             const SizedBox(width: 6),
-            Text('$count',
-                style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: selected ? Colors.black54 : Theme.of(context).hintColor)),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: selected ? Colors.black54 : Theme.of(context).hintColor,
+              ),
+            ),
           ],
         ),
         selected: selected,
@@ -680,7 +716,9 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                 Row(
                   children: [
                     Icon(
-                      editing ? Icons.edit_rounded : Icons.shopping_cart_rounded,
+                      editing
+                          ? Icons.edit_rounded
+                          : Icons.shopping_cart_rounded,
                       size: 18,
                       color: editing ? _kBlue : Theme.of(context).hintColor,
                     ),
@@ -716,8 +754,7 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _cart.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, i) {
                       final line = _cart[i];
                       final lineTotal = line.quantity * line.menuItem.price;
@@ -732,7 +769,9 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                      fontWeight: FontWeight.w800, fontSize: 13),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 if (line.selectedModifiers.isNotEmpty)
                                   Text(
@@ -740,8 +779,9 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                        fontSize: 11,
-                                        color: Theme.of(context).hintColor),
+                                      fontSize: 11,
+                                      color: Theme.of(context).hintColor,
+                                    ),
                                   ),
                               ],
                             ),
@@ -751,7 +791,8 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                             padding: const EdgeInsets.symmetric(vertical: 2),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                  color: Theme.of(context).dividerColor),
+                                color: Theme.of(context).dividerColor,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -771,8 +812,9 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                                     '${line.quantity}',
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 14),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                 ),
                                 _qtyBtn(
@@ -789,7 +831,9 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                               '\$${lineTotal.toStringAsFixed(2)}',
                               textAlign: TextAlign.right,
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w900, fontSize: 13),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -797,8 +841,7 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                             icon: const Icon(Icons.close_rounded, size: 16),
                             visualDensity: VisualDensity.compact,
                             color: Theme.of(context).hintColor,
-                            onPressed: () =>
-                                setState(() => _cart.remove(line)),
+                            onPressed: () => setState(() => _cart.remove(line)),
                           ),
                         ],
                       );
@@ -815,8 +858,10 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                         decoration: const InputDecoration(
                           hintText: 'CUSTOMER NAME',
                           isDense: true,
-                          prefixIcon: Icon(Icons.person_outline_rounded,
-                              size: 18),
+                          prefixIcon: Icon(
+                            Icons.person_outline_rounded,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ),
@@ -827,13 +872,16 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                         Text(
                           '\$${(_subtotal / 100).toStringAsFixed(2)}',
                           style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 20),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20,
+                          ),
                         ),
                         Text(
                           '${_cart.fold(0, (s, l) => s + l.quantity)} items',
                           style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).hintColor),
+                            fontSize: 11,
+                            color: Theme.of(context).hintColor,
+                          ),
                         ),
                       ],
                     ),
@@ -841,12 +889,15 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
                     FilledButton.icon(
                       onPressed: _send,
                       icon: Icon(
-                          editing ? Icons.save_rounded : Icons.send_rounded,
-                          size: 18),
+                        editing ? Icons.save_rounded : Icons.send_rounded,
+                        size: 18,
+                      ),
                       label: Text(editing ? 'UPDATE ORDER' : 'SEND ORDER'),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 22, vertical: 16),
+                          horizontal: 22,
+                          vertical: 16,
+                        ),
                       ),
                     ),
                   ],
@@ -865,8 +916,11 @@ class _IntakeTabState extends ConsumerState<_IntakeTab> {
       borderRadius: BorderRadius.circular(6),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        child: Icon(icon,
-            size: 16, color: Theme.of(context).colorScheme.primary),
+        child: Icon(
+          icon,
+          size: 16,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -886,8 +940,10 @@ class _ModifiersDialogState extends State<_ModifiersDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          Text(widget.menuItem.name.toUpperCase(),
-              style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            widget.menuItem.name.toUpperCase(),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
           const Spacer(),
           Icon(Icons.tune_rounded, size: 18, color: _kPurple),
         ],
@@ -898,11 +954,14 @@ class _ModifiersDialogState extends State<_ModifiersDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('SELECT MODIFIERS',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1)),
+            const Text(
+              'SELECT MODIFIERS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -913,7 +972,8 @@ class _ModifiersDialogState extends State<_ModifiersDialog> {
                     label: Text(m),
                     selected: _selected.contains(m),
                     onSelected: (sel) => setState(
-                        () => sel ? _selected.add(m) : _selected.remove(m)),
+                      () => sel ? _selected.add(m) : _selected.remove(m),
+                    ),
                     showCheckmark: false,
                   ),
               ],
@@ -953,7 +1013,9 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('DELETE ORDER?'),
-        content: const Text('This permanently removes the order and its history.'),
+        content: const Text(
+          'This permanently removes the order and its history.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -975,20 +1037,78 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
   Widget build(BuildContext context) {
     final orders = ref.watch(whOrdersProvider).toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    if (orders.isEmpty) {
-      return _emptyState(Icons.history_rounded, 'NO ORDERS YET',
-          'Orders you send will appear here');
+    final openOrders = orders.where((o) => o.status != 3).toList();
+    final closedOrders = orders.where((o) => o.status == 3).toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: TabBar(
+              isScrollable: false,
+              tabAlignment: TabAlignment.fill,
+              labelColor: Theme.of(context).colorScheme.onSurface,
+              unselectedLabelColor: Theme.of(
+                context,
+              ).colorScheme.onSurfaceVariant,
+              indicatorColor: Theme.of(context).colorScheme.primary,
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
+              tabs: [
+                Tab(text: 'OPEN (${openOrders.length})'),
+                Tab(text: 'CLOSED (${closedOrders.length})'),
+                Tab(text: 'ALL (${orders.length})'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildOrderList(
+                  openOrders,
+                  'NO OPEN ORDERS',
+                  'Active orders waiting to be fulfilled will appear here',
+                ),
+                _buildOrderList(
+                  closedOrders,
+                  'NO CLOSED ORDERS',
+                  'Completed orders will appear here',
+                ),
+                _buildOrderList(
+                  orders,
+                  'NO ORDERS YET',
+                  'Orders you send will appear here',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderList(
+    List<WHOrder> orderList,
+    String emptyTitle,
+    String emptySub,
+  ) {
+    if (orderList.isEmpty) {
+      return _emptyState(Icons.history_rounded, emptyTitle, emptySub);
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: orders.length,
+      itemCount: orderList.length,
       itemBuilder: (context, i) {
-        final order = orders[i];
+        final order = orderList[i];
         final finished = order.status == 3;
-        final itemCount =
-            order.items.fold<int>(0, (s, it) => s + 1);
-        final total = order.items.fold<double>(
-            0, (s, it) => s + it.price);
+        final itemCount = order.items.fold<int>(0, (s, it) => s + 1);
+        final total = order.items.fold<double>(0, (s, it) => s + it.price);
         final minutesAgo = DateTime.now().difference(order.timestamp).inMinutes;
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
@@ -1001,10 +1121,13 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: _statusColor(order.status)
-                            .withValues(alpha: 0.14),
+                        color: _statusColor(
+                          order.status,
+                        ).withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -1023,17 +1146,19 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 15),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                     _chip(
                       finished
                           ? 'Finished'
                           : order.status == 1
-                              ? 'Partial'
-                              : order.status == 2
-                                  ? 'Ready'
-                                  : 'Active',
+                          ? 'Partial'
+                          : order.status == 2
+                          ? 'Ready'
+                          : 'Active',
                       color: _statusColor(order.status),
                     ),
                   ],
@@ -1042,7 +1167,9 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                 Text(
                   '${order.timestamp.hour.toString().padLeft(2, '0')}:${order.timestamp.minute.toString().padLeft(2, '0')}  ·  $minutesAgo min ago',
                   style: TextStyle(
-                      fontSize: 11, color: Theme.of(context).hintColor),
+                    fontSize: 11,
+                    color: Theme.of(context).hintColor,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 const Divider(height: 1),
@@ -1053,13 +1180,23 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                     child: Row(
                       children: [
                         if (item.status == 3)
-                          const Icon(Icons.check_circle_rounded,
-                              size: 15, color: _kGreen)
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            size: 15,
+                            color: _kGreen,
+                          )
                         else if (item.status == 2)
-                          const Icon(Icons.bolt_rounded, size: 15, color: _kAmber)
+                          const Icon(
+                            Icons.bolt_rounded,
+                            size: 15,
+                            color: _kAmber,
+                          )
                         else
-                          const Icon(Icons.radio_button_unchecked_rounded,
-                              size: 15, color: Color(0xFF9CA3AF)),
+                          const Icon(
+                            Icons.radio_button_unchecked_rounded,
+                            size: 15,
+                            color: Color(0xFF9CA3AF),
+                          ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1067,33 +1204,45 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         if (item.modifiers.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(right: 10),
-                            child: Text(item.modifiers.join(', '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Theme.of(context).hintColor)),
+                            child: Text(
+                              item.modifiers.join(', '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context).hintColor,
+                              ),
+                            ),
                           ),
-                        Text('\$${item.price.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w700)),
+                        Text(
+                          '\$${item.price.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 if (order.items.length > 6)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('+ ${order.items.length - 6} more items',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context).hintColor)),
+                    child: Text(
+                      '+ ${order.items.length - 6} more items',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 8),
                 Row(
@@ -1101,7 +1250,9 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                     Text(
                       '$itemCount items  ·  \$${total.toStringAsFixed(2)}',
                       style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w800),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const Spacer(),
                     TextButton.icon(
@@ -1114,8 +1265,9 @@ class _SentQueueTabState extends ConsumerState<_SentQueueTab> {
                       label: const Text('EDIT'),
                     ),
                     TextButton.icon(
-                      onPressed: () =>
-                          ref.read(webHostBridgeProvider).recallOrder(order.uuid),
+                      onPressed: () => ref
+                          .read(webHostBridgeProvider)
+                          .recallOrder(order.uuid),
                       icon: const Icon(Icons.refresh_rounded, size: 16),
                       label: const Text('RECALL'),
                     ),
@@ -1145,8 +1297,11 @@ class _InventoryTab extends ConsumerWidget {
     final bridge = ref.watch(webHostBridgeProvider);
     final tracked = menu.where((i) => i.trackStock).toList();
     if (tracked.isEmpty) {
-      return _emptyState(Icons.inventory_2_rounded, 'NO STOCK-TRACKED ITEMS',
-          'Enable TRACK STOCK on menu items in LIBRARY');
+      return _emptyState(
+        Icons.inventory_2_rounded,
+        'NO STOCK-TRACKED ITEMS',
+        'Enable TRACK STOCK on menu items in LIBRARY',
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1154,8 +1309,10 @@ class _InventoryTab extends ConsumerWidget {
       itemBuilder: (context, i) {
         final item = tracked[i];
         final low = item.stockQuantity <= 5;
-        final progress =
-            (item.stockQuantity / (item.stockQuantity + 20)).clamp(0.0, 1.0);
+        final progress = (item.stockQuantity / (item.stockQuantity + 20)).clamp(
+          0.0,
+          1.0,
+        );
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: Padding(
@@ -1174,19 +1331,23 @@ class _InventoryTab extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 14),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (low)
-                            _chip('LOW', color: _kRed),
+                          if (low) _chip('LOW', color: _kRed),
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text('${item.category}  ·  ${item.defaultStation}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).hintColor)),
+                      Text(
+                        '${item.category}  ·  ${item.defaultStation}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(4),
@@ -1194,8 +1355,9 @@ class _InventoryTab extends ConsumerWidget {
                           value: progress,
                           minHeight: 5,
                           color: low ? _kRed : _kGreen,
-                          backgroundColor:
-                              Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).dividerColor.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -1205,8 +1367,7 @@ class _InventoryTab extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    border:
-                        Border.all(color: Theme.of(context).dividerColor),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -1215,7 +1376,9 @@ class _InventoryTab extends ConsumerWidget {
                       IconButton(
                         icon: const Icon(Icons.remove_rounded, size: 18),
                         onPressed: () => bridge.setStock(
-                            item.id, (item.stockQuantity - 1).clamp(0, 99999)),
+                          item.id,
+                          (item.stockQuantity - 1).clamp(0, 99999),
+                        ),
                       ),
                       SizedBox(
                         width: 44,
@@ -1257,14 +1420,18 @@ class _LibraryTab extends ConsumerStatefulWidget {
 class _LibraryTabState extends ConsumerState<_LibraryTab> {
   Future<void> _menuForm([WHMenuItem? existing]) async {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final catCtrl =
-        TextEditingController(text: existing?.category ?? 'All Items');
-    final statCtrl =
-        TextEditingController(text: existing?.defaultStation ?? '');
-    final priceCtrl =
-        TextEditingController(text: existing == null ? '' : '${existing.price}');
-    final modCtrl =
-        TextEditingController(text: existing?.modifiers.join(',') ?? '');
+    final catCtrl = TextEditingController(
+      text: existing?.category ?? 'All Items',
+    );
+    final statCtrl = TextEditingController(
+      text: existing?.defaultStation ?? '',
+    );
+    final priceCtrl = TextEditingController(
+      text: existing == null ? '' : '${existing.price}',
+    );
+    final modCtrl = TextEditingController(
+      text: existing?.modifiers.join(',') ?? '',
+    );
     var trackStock = existing?.trackStock ?? false;
     var oneTouch = existing?.oneTouch ?? false;
 
@@ -1272,51 +1439,85 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          title: Text(existing == null ? 'NEW MENU ITEM' : 'EDIT MENU ITEM',
-              style: const TextStyle(fontWeight: FontWeight.w900)),
+          title: Text(
+            existing == null ? 'NEW MENU ITEM' : 'EDIT MENU ITEM',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
           content: SizedBox(
             width: 380,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(controller: nameCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'NAME', prefixIcon: Icon(Icons.fastfood_rounded, size: 18))),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'NAME',
+                      prefixIcon: Icon(Icons.fastfood_rounded, size: 18),
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  TextField(controller: catCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'CATEGORY', prefixIcon: Icon(Icons.category_rounded, size: 18))),
+                  TextField(
+                    controller: catCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'CATEGORY',
+                      prefixIcon: Icon(Icons.category_rounded, size: 18),
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  TextField(controller: statCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'STATION', prefixIcon: Icon(Icons.dns_rounded, size: 18))),
+                  TextField(
+                    controller: statCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'STATION',
+                      prefixIcon: Icon(Icons.dns_rounded, size: 18),
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  TextField(controller: priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                          labelText: 'PRICE', prefixIcon: Icon(Icons.attach_money_rounded, size: 18))),
+                  TextField(
+                    controller: priceCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'PRICE',
+                      prefixIcon: Icon(Icons.attach_money_rounded, size: 18),
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  TextField(controller: modCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'MODIFIERS (comma-separated)',
-                          prefixIcon: Icon(Icons.tune_rounded, size: 18))),
+                  TextField(
+                    controller: modCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'MODIFIERS (comma-separated)',
+                      prefixIcon: Icon(Icons.tune_rounded, size: 18),
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('TRACK STOCK',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                    title: const Text(
+                      'TRACK STOCK',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
                     value: trackStock,
                     onChanged: (v) => setDlgState(() => trackStock = v),
                   ),
                   const SizedBox(height: 4),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('ONE TOUCH ADD',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                    title: const Text(
+                      'ONE TOUCH ADD',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
                     subtitle: const Text(
-                        'Skips modifier screen on tap in intake',
-                        style: TextStyle(fontSize: 10)),
+                      'Skips modifier screen on tap in intake',
+                      style: TextStyle(fontSize: 10),
+                    ),
                     value: oneTouch,
                     onChanged: (v) => setDlgState(() => oneTouch = v),
                   ),
@@ -1342,7 +1543,9 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
     final menu = {
       if (existing != null) 'id': existing.id,
       'name': nameCtrl.text.trim(),
-      'category': catCtrl.text.trim().isEmpty ? 'All Items' : catCtrl.text.trim(),
+      'category': catCtrl.text.trim().isEmpty
+          ? 'All Items'
+          : catCtrl.text.trim(),
       'defaultStation': statCtrl.text.trim().isEmpty
           ? (existing?.defaultStation ?? 'Main Station')
           : statCtrl.text.trim(),
@@ -1392,21 +1595,19 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
   }
 
   Future<void> _stationForm(int? existingId, String existingName) async {
-    final name =
-        await _nameDialog(title: 'STATION', initial: existingName);
+    final name = await _nameDialog(title: 'STATION', initial: existingName);
     if (name == null || name.isEmpty) return;
     ref.read(webHostBridgeProvider).saveStation({
-      if (existingId != null) 'id': existingId,
+      'id': ?existingId,
       'name': name,
     });
   }
 
   Future<void> _modifierForm(int? existingId, String existingName) async {
-    final name =
-        await _nameDialog(title: 'MODIFIER', initial: existingName);
+    final name = await _nameDialog(title: 'MODIFIER', initial: existingName);
     if (name == null || name.isEmpty) return;
     ref.read(webHostBridgeProvider).saveModifier({
-      if (existingId != null) 'id': existingId,
+      'id': ?existingId,
       'name': name,
     });
   }
@@ -1449,9 +1650,7 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
       children: [
         Row(
           children: [
-            const Expanded(
-              child: _SectionHeader(title: 'MENU ITEMS'),
-            ),
+            const Expanded(child: _SectionHeader(title: 'MENU ITEMS')),
             FilledButton.tonalIcon(
               onPressed: () => _menuForm(),
               icon: const Icon(Icons.add_rounded, size: 18),
@@ -1470,14 +1669,21 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
                   color: _kBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Icon(Icons.fastfood_rounded,
-                    size: 19, color: _kBlue),
+                child: const Icon(
+                  Icons.fastfood_rounded,
+                  size: 19,
+                  color: _kBlue,
+                ),
               ),
-              title: Text(i.name.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              title: Text(
+                i.name.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
               subtitle: Text(
                 '${i.category} · ${i.defaultStation} · '
                 '\$${i.price.toStringAsFixed(2)}'
@@ -1487,7 +1693,9 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    fontSize: 12, color: Theme.of(context).hintColor),
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1501,7 +1709,8 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
                     color: _kRed,
                     onPressed: () => _confirmDelete(
                       title: 'DELETE "${i.name}"?',
-                      subtitle: 'Menu items used by past orders keep their history.',
+                      subtitle:
+                          'Menu items used by past orders keep their history.',
                       onDelete: () => bridge.deleteMenu(i.id),
                     ),
                   ),
@@ -1534,9 +1743,13 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
                 ),
                 child: const Icon(Icons.dns_rounded, size: 19, color: _kPurple),
               ),
-              title: Text(s.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 14)),
+              title: Text(
+                s.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1580,12 +1793,15 @@ class _LibraryTabState extends ConsumerState<_LibraryTab> {
                   color: _kGreen.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child:
-                    const Icon(Icons.tune_rounded, size: 19, color: _kGreen),
+                child: const Icon(Icons.tune_rounded, size: 19, color: _kGreen),
               ),
-              title: Text(m.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 14)),
+              title: Text(
+                m.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1656,11 +1872,14 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
                   children: [
                     Icon(Icons.campaign_rounded, size: 18, color: _kAmber),
                     const SizedBox(width: 8),
-                    const Text('KITCHEN BROADCAST',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 12,
-                            letterSpacing: 1)),
+                    const Text(
+                      'KITCHEN BROADCAST',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1677,10 +1896,7 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
                       child: Text('ALL SCREENS'),
                     ),
                     for (final s in allStations)
-                      DropdownMenuItem<String>(
-                        value: s,
-                        child: Text(s),
-                      ),
+                      DropdownMenuItem<String>(value: s, child: Text(s)),
                   ],
                   onChanged: (v) => setState(() => _targetStation = v),
                 ),
@@ -1711,12 +1927,16 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
                 const SizedBox(height: 6),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('RUSH MODE',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
+                  title: const Text(
+                    'RUSH MODE',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                   subtitle: Text(
                     'Highlights active tickets on client screens',
                     style: TextStyle(
-                        fontSize: 12, color: Theme.of(context).hintColor),
+                      fontSize: 12,
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                   value: _rushMode,
                   activeTrackColor: _kRed,
@@ -1732,8 +1952,11 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
         const SizedBox(height: 18),
         _SectionHeader(title: 'CONNECTED DEVICES', count: '${clients.length}'),
         if (clients.isEmpty)
-          _emptyState(Icons.devices_rounded, 'NO DEVICES CONNECTED',
-              'Kitchen tablets appear here when they connect')
+          _emptyState(
+            Icons.devices_rounded,
+            'NO DEVICES CONNECTED',
+            'Kitchen tablets appear here when they connect',
+          )
         else
           ...clients.map(
             (c) => Card(
@@ -1741,16 +1964,24 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: _kGreen.withValues(alpha: 0.14),
-                  child: const Icon(Icons.tablet_android_rounded,
-                      size: 19, color: _kGreen),
+                  child: const Icon(
+                    Icons.tablet_android_rounded,
+                    size: 19,
+                    color: _kGreen,
+                  ),
                 ),
-                title: Text(c.deviceName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 14)),
+                title: Text(
+                  c.deviceName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
                 subtitle: Text(
-                    '${c.currentStation} · ${c.id.substring(0, 4).toUpperCase()}'),
+                  '${c.currentStation} · ${c.id.substring(0, 4).toUpperCase()}',
+                ),
                 trailing: _chip('ONLINE', color: _kGreen),
               ),
             ),
@@ -1767,14 +1998,16 @@ class _ClientsTabState extends ConsumerState<_ClientsTab> {
         .broadcastMessage(text, station: _targetStation);
     _broadcastCtrl.clear();
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        _targetStation == null
-            ? 'BROADCAST SENT TO ALL SCREENS'
-            : 'BROADCAST SENT TO $_targetStation',
-        style: const TextStyle(fontWeight: FontWeight.w800),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _targetStation == null
+              ? 'BROADCAST SENT TO ALL SCREENS'
+              : 'BROADCAST SENT TO $_targetStation',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        duration: const Duration(seconds: 1),
       ),
-      duration: const Duration(seconds: 1),
-    ));
+    );
   }
 }

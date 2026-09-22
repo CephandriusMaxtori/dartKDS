@@ -189,7 +189,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.1),
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.1,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -308,7 +310,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                         duration: const Duration(milliseconds: 200),
                         child: Material(
                           color: isOut
-                              ? theme.dividerColor.withOpacity(0.2)
+                              ? theme.dividerColor.withValues(alpha: 0.2)
                               : theme.cardColor,
                           borderRadius: BorderRadius.circular(16),
                           clipBehavior: Clip.antiAlias,
@@ -650,7 +652,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               spreadRadius: 0,
             ),
@@ -692,7 +694,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: theme.dividerColor.withOpacity(0.2),
+                      color: theme.dividerColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -715,7 +717,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                   const SizedBox(height: 20),
                   TextField(
                     controller: controller,
-                    autofocus: true,
+                    autofocus: false,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -754,8 +756,8 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: isShort
-                            ? Colors.orange.withOpacity(0.1)
-                            : const Color(0xFF22C55E).withOpacity(0.1),
+                            ? Colors.orange.withValues(alpha: 0.1)
+                            : const Color(0xFF22C55E).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isShort
@@ -1072,7 +1074,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.1),
+                                  color: Colors.red.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
@@ -1158,7 +1160,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       ),
                       onPressed: isRequirementMet
                           ? () {
-                              if (editIndex != null)
+                              if (editIndex != null) {
                                 ref
                                     .read(intakeProvider.notifier)
                                     .updateItem(
@@ -1166,7 +1168,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                       modifiers: selected,
                                       quantity: quantity,
                                     );
-                              else
+                              } else {
                                 ref
                                     .read(intakeProvider.notifier)
                                     .addItem(
@@ -1174,6 +1176,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                       selectedModifiers: selected,
                                       quantity: quantity,
                                     );
+                              }
                               HapticFeedback.mediumImpact();
                               Navigator.pop(context);
                             }

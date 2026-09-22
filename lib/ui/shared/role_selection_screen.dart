@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -150,7 +151,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                     child: Text(
                       'DARTKDS v1.2.0 • BUILT FOR WARRIORS',
                       style: TextStyle(
-                        color: theme.hintColor.withOpacity(0.5),
+                        color: theme.hintColor.withValues(alpha: 0.5),
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1,
@@ -178,7 +179,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.primary.withOpacity(0.3),
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -253,7 +254,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
               boxShadow: [
                 if (!isDark)
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
+                    color: Colors.black.withValues(alpha: 0.03),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -266,7 +267,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.1),
+                    color: accentColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: accentColor, size: 26),

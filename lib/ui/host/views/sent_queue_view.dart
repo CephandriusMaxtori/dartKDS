@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../models/database.dart';
 import '../../../models/item_status.dart';
+import '../../../models/order_status.dart';
 import '../../../providers/app_state_providers.dart';
 import '../../../providers/intake_provider.dart';
 import '../../../providers/service_providers.dart';
@@ -27,73 +28,165 @@ class SentQueueView extends ConsumerWidget {
         db.kDSOrders,
       )..orderBy([(t) => OrderingTerm.desc(t.timestamp)])).watch(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
-        final orders = snapshot.data!;
-        final emptyColor = theme.hintColor;
-
-        if (orders.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: theme.dividerColor.withValues(alpha: 0.4),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.history_rounded,
-                    size: 56,
-                    color: emptyColor.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'No Orders Sent Yet',
-                  style: TextStyle(
-                    color: emptyColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    'Completed orders will appear here for recall or editing.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: emptyColor.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
         }
+        final orders = snapshot.data!;
+        final openOrders = orders
+            .where((o) => o.status != OrderStatus.complete)
+            .toList();
+        final closedOrders = orders
+            .where((o) => o.status == OrderStatus.complete)
+            .toList();
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
-          itemBuilder: (context, index) {
-            final order = orders[index];
-            return Card(
-              elevation: 0,
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(color: theme.dividerColor),
+        return DefaultTabController(
+          length: 3,
+          child: Column(
+            children: [
+              Container(
+                color: theme.scaffoldBackgroundColor,
+                child: TabBar(
+                  isScrollable: false,
+                  tabAlignment: TabAlignment.fill,
+                  labelColor: theme.colorScheme.onSurface,
+                  unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+                  indicatorColor: theme.colorScheme.primary,
+                  indicatorWeight: 3,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    letterSpacing: 0.5,
+                  ),
+                  tabs: [
+                    Tab(text: 'OPEN (${openOrders.length})'),
+                    Tab(text: 'CLOSED (${closedOrders.length})'),
+                    Tab(text: 'ALL (${orders.length})'),
+                  ],
+                ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildOrderList(
+                      context,
+                      ref,
+                      db,
+                      server,
+                      openOrders,
+                      timeFormat,
+                      theme,
+                      'No Open Orders',
+                      'Active orders waiting to be fulfilled will appear here.',
+                    ),
+                    _buildOrderList(
+                      context,
+                      ref,
+                      db,
+                      server,
+                      closedOrders,
+                      timeFormat,
+                      theme,
+                      'No Closed Orders',
+                      'Completed orders will appear here for recall or editing.',
+                    ),
+                    _buildOrderList(
+                      context,
+                      ref,
+                      db,
+                      server,
+                      orders,
+                      timeFormat,
+                      theme,
+                      'No Orders Sent Yet',
+                      'Sent orders will appear here for recall or editing.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOrderList(
+    BuildContext context,
+    WidgetRef ref,
+    KDSDatabase db,
+    dynamic server,
+    List<KDSOrderData> orders,
+    String timeFormat,
+    ThemeData theme,
+    String emptyTitle,
+    String emptySub,
+  ) {
+    final emptyColor = theme.hintColor;
+
+    if (orders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.dividerColor.withValues(alpha: 0.4),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.history_rounded,
+                size: 56,
+                color: emptyColor.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              emptyTitle,
+              style: TextStyle(
+                color: emptyColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                emptySub,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: emptyColor.withValues(alpha: 0.7),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: orders.length,
+      itemBuilder: (context, index) {
+        final order = orders[index];
+        return Card(
+          elevation: 0,
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: theme.dividerColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'Order #${order.uuid.substring(0, 4).toUpperCase()}',
@@ -103,172 +196,213 @@ class SentQueueView extends ConsumerWidget {
                             color: theme.textTheme.bodyLarge?.color,
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        _buildStatusBadge(order.status),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          DateFormat(timeFormat).format(order.timestamp),
+                          style: TextStyle(
+                            color: theme.hintColor,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _editOrder(context, ref, db, order),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.08,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'EDIT',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _recallOrder(context, db, server, order),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'RECALL',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                // Items summary
+                StreamBuilder<List<KDSItemData>>(
+                  stream: (db.select(
+                    db.kDSItems,
+                  )..where((t) => t.orderUuid.equals(order.uuid))).watch(),
+                  builder: (context, itemSnapshot) {
+                    if (!itemSnapshot.hasData) {
+                      return const SizedBox.shrink();
+                    }
+                    final items = itemSnapshot.data!;
+                    final orderTotal = items.fold<double>(
+                      0,
+                      (sum, item) => sum + item.price,
+                    );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...items.map(
+                          (i) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle,
+                                      size: 14,
+                                      color: Color(0xFF22C55E),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          i.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        if (i.modifiers.isNotEmpty)
+                                          Text(
+                                            i.modifiers.join(', '),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: theme.hintColor,
+                                              fontWeight: FontWeight.bold,
+                                              backgroundColor: const Color(
+                                                0xFFFACC15,
+                                              ).withValues(alpha: 0.1),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '\$${i.price.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.hintColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 24),
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              DateFormat(timeFormat).format(order.timestamp),
+                              'TOTAL',
                               style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
                                 color: theme.hintColor,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () => _editOrder(context, ref, db, order),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'EDIT',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onSurface,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () =>
-                                  _recallOrder(context, db, server, order),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'RECALL',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.primary,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10,
-                                  ),
-                                ),
+                            Text(
+                              '\$${orderTotal.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                                color: theme.colorScheme.primary,
                               ),
                             ),
                           ],
                         ),
                       ],
-                    ),
-                    const Divider(height: 24),
-                    // Items summary
-                    StreamBuilder<List<KDSItemData>>(
-                      stream: (db.select(
-                        db.kDSItems,
-                      )..where((t) => t.orderUuid.equals(order.uuid))).watch(),
-                      builder: (context, itemSnapshot) {
-                        if (!itemSnapshot.hasData)
-                          return const SizedBox.shrink();
-                        final items = itemSnapshot.data!;
-                        final orderTotal = items.fold<double>(
-                          0,
-                          (sum, item) => sum + item.price,
-                        );
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...items.map(
-                              (i) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4.0),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.check_circle,
-                                          size: 14,
-                                          color: Color(0xFF22C55E),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              i.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            if (i.modifiers.isNotEmpty)
-                                              Text(
-                                                i.modifiers.join(', '),
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: theme.hintColor,
-                                                  fontWeight: FontWeight.bold,
-                                                  backgroundColor: const Color(
-                                                    0xFFFACC15,
-                                                  ).withOpacity(0.1),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      '\$${i.price.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: theme.hintColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const Divider(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'TOTAL',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 14,
-                                    color: theme.hintColor,
-                                  ),
-                                ),
-                                Text(
-                                  '\$${orderTotal.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildStatusBadge(OrderStatus status) {
+    Color color;
+    String text;
+    switch (status) {
+      case OrderStatus.pending:
+        color = const Color(0xFFF59E0B);
+        text = 'PENDING';
+        break;
+      case OrderStatus.partial:
+        color = const Color(0xFF3B82F6);
+        text = 'IN PROGRESS';
+        break;
+      case OrderStatus.ready:
+        color = const Color(0xFF22C55E);
+        text = 'READY';
+        break;
+      case OrderStatus.complete:
+        color = const Color(0xFF6B7280);
+        text = 'CLOSED';
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 10,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
