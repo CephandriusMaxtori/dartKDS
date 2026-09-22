@@ -69,7 +69,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
             ),
             if (isTablet && intakeState.items.isNotEmpty)
               Container(
-                width: 350,
+                width: 360,
                 decoration: BoxDecoration(
                   border: Border(
                     left: BorderSide(color: theme.dividerColor, width: 2),
@@ -119,6 +119,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
     return Column(
       children: [
+        _buildOpenTabsBar(context),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           decoration: BoxDecoration(
@@ -412,6 +413,324 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     );
   }
 
+  Widget _buildOpenTabsBar(BuildContext context) {
+    final db = ref.watch(databaseProvider);
+    final intakeState = ref.watch(intakeProvider);
+    final theme = Theme.of(context);
+
+    return StreamBuilder<List<KDSOrderData>>(
+      stream:
+          (db.select(db.kDSOrders)
+                ..where((t) => t.status.isNotIn([OrderStatus.complete.index]))
+                ..orderBy([(t) => drift.OrderingTerm.desc(t.timestamp)]))
+              .watch(),
+      builder: (context, snapshot) {
+        final openOrders = snapshot.data ?? [];
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(bottom: BorderSide(color: theme.dividerColor)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.local_bar_rounded,
+                        size: 16,
+                        color: Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'OPEN BAR TABS (${openOrders.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  InkWell(
+                    onTap: () => _promptNewTabName(context, ref),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.15,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.add,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'NEW TAB',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        selected:
+                            intakeState.editingOrderUuid == null &&
+                            intakeState.customerName.isEmpty &&
+                            intakeState.items.isEmpty,
+                        selectedColor: theme.colorScheme.primary.withValues(
+                          alpha: 0.2,
+                        ),
+                        label: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_circle_outline, size: 14),
+                            SizedBox(width: 4),
+                            Text(
+                              'QUICK ORDER',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                        onSelected: (_) {
+                          ref.read(intakeProvider.notifier).clear();
+                        },
+                      ),
+                    ),
+                    ...openOrders.map((order) {
+                      final isSelected =
+                          intakeState.editingOrderUuid == order.uuid;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: StreamBuilder<List<KDSItemData>>(
+                          stream:
+                              (db.select(db.kDSItems)..where(
+                                    (t) => t.orderUuid.equals(order.uuid),
+                                  ))
+                                  .watch(),
+                          builder: (context, itemSnap) {
+                            final items = itemSnap.data ?? [];
+                            final orderTotal = items.fold<double>(
+                              0,
+                              (s, i) => s + i.price,
+                            );
+
+                            return ChoiceChip(
+                              selected: isSelected,
+                              selectedColor: theme.colorScheme.primary
+                                  .withValues(alpha: 0.2),
+                              side: isSelected
+                                  ? BorderSide(
+                                      color: theme.colorScheme.primary,
+                                      width: 2,
+                                    )
+                                  : null,
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    '🍺 ',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${order.customerName.toUpperCase()} · \$${orderTotal.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontWeight: isSelected
+                                          ? FontWeight.w900
+                                          : FontWeight.w700,
+                                      fontSize: 11,
+                                      color: isSelected
+                                          ? theme.colorScheme.primary
+                                          : theme.textTheme.bodyLarge?.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onSelected: (_) =>
+                                  _selectOpenTab(context, ref, db, order),
+                            );
+                          },
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _promptNewTabName(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final theme = Theme.of(context);
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.cardColor,
+        title: const Row(
+          children: [
+            Icon(Icons.local_bar_rounded, color: Color(0xFFF59E0B)),
+            SizedBox(width: 8),
+            Text(
+              'START BAR TAB',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+              decoration: InputDecoration(
+                labelText: 'TAB / GUEST / TABLE NAME',
+                hintText: 'e.g. Alex, Table 4, Bar 2',
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children:
+                  [
+                    'BAR 1',
+                    'BAR 2',
+                    'BAR 3',
+                    'TABLE 1',
+                    'TABLE 2',
+                    'TABLE 3',
+                  ].map((label) {
+                    return ActionChip(
+                      label: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () {
+                        controller.text = label;
+                      },
+                    );
+                  }).toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+            ),
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('OPEN TAB'),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.isNotEmpty) {
+      ref.read(intakeProvider.notifier).clear();
+      ref.read(intakeProvider.notifier).setCustomerName(name);
+    }
+  }
+
+  Future<void> _selectOpenTab(
+    BuildContext context,
+    WidgetRef ref,
+    KDSDatabase db,
+    KDSOrderData order,
+  ) async {
+    final items = await (db.select(
+      db.kDSItems,
+    )..where((t) => t.orderUuid.equals(order.uuid))).get();
+    final allMenuItems = await db.select(db.menuItems).get();
+
+    final List<IntakeItem> intakeItems = [];
+    for (final item in items) {
+      final menuItem = allMenuItems.firstWhere(
+        (m) => m.name == item.name,
+        orElse: () => MenuItemData(
+          id: -1,
+          guid: '',
+          name: item.name,
+          category: 'Bar',
+          defaultStation: item.stationTag,
+          modifiers: [],
+          price: item.price,
+          requiredModifiers: [],
+          tags: [],
+          stockQuantity: 0,
+          trackStock: false,
+          oneTouch: false,
+          updatedAtMs: 0,
+        ),
+      );
+      intakeItems.add(
+        IntakeItem(
+          menuItem: menuItem,
+          selectedModifiers: item.modifiers,
+          quantity: 1,
+        ),
+      );
+    }
+
+    ref
+        .read(intakeProvider.notifier)
+        .loadOrder(order.uuid, order.customerName, intakeItems);
+  }
+
   Widget _buildOrderSummarySection(
     BuildContext context, {
     required bool isSidePanel,
@@ -425,39 +744,79 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       totalPrice += item.menuItem.price * item.quantity;
     }
 
+    final isEditingTab = intakeState.editingOrderUuid != null;
+    final tabName = intakeState.customerName.isEmpty
+        ? 'GUEST'
+        : intakeState.customerName.toUpperCase();
+
     final panelContent = Material(
       color: theme.cardColor,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TextField(
-              onChanged: (val) =>
-                  ref.read(intakeProvider.notifier).setCustomerName(val),
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Customer Name (optional)',
-                hintStyle: TextStyle(
-                  color: theme.hintColor,
-                  fontWeight: FontWeight.normal,
-                  fontSize: 12,
-                ),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 0,
-                  vertical: 8,
-                ),
-                border: InputBorder.none,
-                prefixIcon: Icon(
-                  Icons.person_outline,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isEditingTab
+                  ? const Color(0xFFFACC15).withValues(alpha: 0.12)
+                  : theme.dividerColor.withValues(alpha: 0.1),
+              border: Border(bottom: BorderSide(color: theme.dividerColor)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.local_bar_rounded,
                   size: 16,
-                  color: theme.hintColor,
+                  color: isEditingTab
+                      ? const Color(0xFFD97706)
+                      : theme.hintColor,
                 ),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 24,
-                  minHeight: 0,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller:
+                        TextEditingController(text: intakeState.customerName)
+                          ..selection = TextSelection.collapsed(
+                            offset: intakeState.customerName.length,
+                          ),
+                    onChanged: (val) =>
+                        ref.read(intakeProvider.notifier).setCustomerName(val),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      letterSpacing: 0.5,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'TAB / GUEST NAME',
+                      hintStyle: TextStyle(
+                        color: theme.hintColor,
+                        fontWeight: FontWeight.normal,
+                        fontSize: 12,
+                      ),
+                      isDense: true,
+                      border: InputBorder.none,
+                    ),
+                  ),
                 ),
-              ),
+                if (isEditingTab)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFACC15).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'OPEN TAB',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                        color: Color(0xFFD97706),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           Padding(
@@ -466,7 +825,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'CURRENT TICKET (${intakeState.items.length})',
+                  'ITEMS ON TAB (${intakeState.items.length})',
                   style: theme.textTheme.labelLarge,
                 ),
                 TextButton(
@@ -475,14 +834,14 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text(
-                          'RESET TICKET?',
+                          'CLEAR TICKET?',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
                           ),
                         ),
                         content: const Text(
-                          'This will remove all items from the current ticket.',
+                          'This will clear items from the current view.',
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -501,7 +860,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                               ref.read(intakeProvider.notifier).clear();
                             },
                             child: const Text(
-                              'RESET',
+                              'CLEAR',
                               style: TextStyle(
                                 color: Colors.red,
                                 fontWeight: FontWeight.w900,
@@ -513,7 +872,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                     );
                   },
                   child: const Text(
-                    'RESET',
+                    'CLEAR',
                     style: TextStyle(
                       color: Colors.red,
                       fontWeight: FontWeight.w900,
@@ -588,55 +947,69 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: intakeState.items.isEmpty
-                      ? theme.dividerColor
-                      : const Color(0xFF111111),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onPressed: intakeState.items.isEmpty
-                    ? null
-                    : () {
-                        if (totalPrice > 0 &&
-                            intakeState.editingOrderUuid == null) {
-                          _showPaymentDialog(context, ref, totalPrice);
-                        } else {
-                          _sendToKitchen(context, ref);
-                        }
-                      },
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    Text(
-                      intakeState.editingOrderUuid != null
-                          ? 'UPDATE ORDER'
-                          : 'COMPLETE ORDER',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                        fontSize: 12,
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: intakeState.items.isEmpty
+                              ? theme.dividerColor
+                              : const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 16),
+                        label: Text(
+                          isEditingTab ? 'SEND ROUND' : 'OPEN TAB & SEND',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        onPressed: intakeState.items.isEmpty
+                            ? null
+                            : () =>
+                                  _sendToKitchen(context, ref, closeTab: false),
                       ),
                     ),
-                    if (totalPrice > 0)
-                      Text(
-                        '\$${totalPrice.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 14,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: intakeState.items.isEmpty
+                              ? theme.dividerColor
+                              : const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
+                        icon: const Icon(Icons.point_of_sale_rounded, size: 16),
+                        label: const Text(
+                          'PAY & CLOSE TAB',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        onPressed: intakeState.items.isEmpty
+                            ? null
+                            : () =>
+                                  _showPaymentDialog(context, ref, totalPrice),
                       ),
+                    ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -646,7 +1019,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     if (isSidePanel) {
       return panelContent;
     } else {
-      final bottomHeight = (screenHeight * 0.4).clamp(180.0, 320.0);
+      final bottomHeight = (screenHeight * 0.4).clamp(200.0, 340.0);
       return Container(
         height: bottomHeight,
         decoration: BoxDecoration(
@@ -683,7 +1056,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               side: BorderSide(color: theme.dividerColor),
             ),
             title: const Text(
-              'PAYMENT CALCULATOR',
+              'PAYMENT & CLOSE TAB',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
             ),
             content: SizedBox(
@@ -828,7 +1201,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF111111),
+                  backgroundColor: const Color(0xFF16A34A),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
@@ -837,9 +1210,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 ),
                 onPressed: () {
                   Navigator.pop(context);
-                  _sendToKitchen(context, ref);
+                  _sendToKitchen(context, ref, closeTab: true);
                 },
-                child: const Text('COMPLETE ORDER'),
+                child: const Text('SETTLE & CLOSE TAB'),
               ),
             ],
           );
@@ -915,7 +1288,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Added: ${item.name}',
+            'Added to Tab: ${item.name}',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           duration: const Duration(milliseconds: 800),
@@ -1182,7 +1555,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                             }
                           : null,
                       child: Text(
-                        editIndex != null ? 'SAVE CHANGES' : 'ADD TO ORDER',
+                        editIndex != null ? 'SAVE CHANGES' : 'ADD TO TAB',
                       ),
                     ),
                   ],
@@ -1193,7 +1566,11 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     );
   }
 
-  Future<void> _sendToKitchen(BuildContext context, WidgetRef ref) async {
+  Future<void> _sendToKitchen(
+    BuildContext context,
+    WidgetRef ref, {
+    bool closeTab = false,
+  }) async {
     HapticFeedback.heavyImpact();
     final state = ref.read(intakeProvider);
     final db = ref.read(databaseProvider);
@@ -1202,6 +1579,8 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final isEditing = state.editingOrderUuid != null;
     final orderUuid = state.editingOrderUuid ?? const Uuid().v4();
     final timestamp = DateTime.now();
+    final finalStatus = closeTab ? OrderStatus.complete : OrderStatus.pending;
+    final tabName = state.customerName.isEmpty ? 'Guest' : state.customerName;
 
     if (isEditing) {
       final oldItems = await (db.select(
@@ -1229,11 +1608,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         db.kDSOrders,
       )..where((t) => t.uuid.equals(orderUuid))).write(
         KDSOrdersCompanion(
-          customerName: drift.Value(
-            state.customerName.isEmpty ? 'Guest' : state.customerName,
-          ),
+          customerName: drift.Value(tabName),
           timestamp: drift.Value(timestamp),
-          status: const drift.Value(OrderStatus.pending),
+          status: drift.Value(finalStatus),
           updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
         ),
       );
@@ -1243,11 +1620,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           .insert(
             KDSOrderData(
               uuid: orderUuid,
-              customerName: state.customerName.isEmpty
-                  ? 'Guest'
-                  : state.customerName,
+              customerName: tabName,
               timestamp: timestamp,
-              status: OrderStatus.pending,
+              status: finalStatus,
               updatedAtMs: DateTime.now().millisecondsSinceEpoch,
             ),
           );
@@ -1296,14 +1671,15 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     }
 
     final broadcastPayload = jsonEncode({
-      'type': isEditing ? 'OrderUpdated' : 'OrderCreated',
+      'type': closeTab
+          ? 'TicketFinished'
+          : (isEditing ? 'OrderUpdated' : 'OrderCreated'),
+      'orderUuid': orderUuid,
       'order': {
         'uuid': orderUuid,
-        'customerName': state.customerName.isEmpty
-            ? 'Guest'
-            : state.customerName,
+        'customerName': tabName,
         'timestamp': timestamp.toIso8601String(),
-        'status': OrderStatus.pending.index,
+        'status': finalStatus.index,
         'items': jsonItems,
       },
     });
@@ -1317,9 +1693,16 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          isEditing ? 'Order Updated Successfully' : 'Order Sent Successfully',
+          closeTab
+              ? 'Tab "$tabName" Closed & Paid!'
+              : (isEditing
+                    ? 'Tab "$tabName" Updated!'
+                    : 'Round Sent for Tab "$tabName"!'),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: closeTab
+            ? const Color(0xFF16A34A)
+            : const Color(0xFF111111),
       ),
     );
   }

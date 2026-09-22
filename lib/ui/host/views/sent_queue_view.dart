@@ -58,8 +58,8 @@ class SentQueueView extends ConsumerWidget {
                     letterSpacing: 0.5,
                   ),
                   tabs: [
-                    Tab(text: 'OPEN (${openOrders.length})'),
-                    Tab(text: 'CLOSED (${closedOrders.length})'),
+                    Tab(text: 'OPEN TABS (${openOrders.length})'),
+                    Tab(text: 'CLOSED TABS (${closedOrders.length})'),
                     Tab(text: 'ALL (${orders.length})'),
                   ],
                 ),
@@ -75,8 +75,9 @@ class SentQueueView extends ConsumerWidget {
                       openOrders,
                       timeFormat,
                       theme,
-                      'No Open Orders',
-                      'Active orders waiting to be fulfilled will appear here.',
+                      'No Open Bar Tabs',
+                      'Active tabs waiting to be settled will appear here.',
+                      isOpenTabSection: true,
                     ),
                     _buildOrderList(
                       context,
@@ -86,8 +87,9 @@ class SentQueueView extends ConsumerWidget {
                       closedOrders,
                       timeFormat,
                       theme,
-                      'No Closed Orders',
-                      'Completed orders will appear here for recall or editing.',
+                      'No Closed Tabs',
+                      'Settled bar tabs will appear here.',
+                      isOpenTabSection: false,
                     ),
                     _buildOrderList(
                       context,
@@ -97,8 +99,9 @@ class SentQueueView extends ConsumerWidget {
                       orders,
                       timeFormat,
                       theme,
-                      'No Orders Sent Yet',
-                      'Sent orders will appear here for recall or editing.',
+                      'No Bar Tabs Found',
+                      'Bar tabs will appear here.',
+                      isOpenTabSection: false,
                     ),
                   ],
                 ),
@@ -119,8 +122,9 @@ class SentQueueView extends ConsumerWidget {
     String timeFormat,
     ThemeData theme,
     String emptyTitle,
-    String emptySub,
-  ) {
+    String emptySub, {
+    required bool isOpenTabSection,
+  }) {
     final emptyColor = theme.hintColor;
 
     if (orders.isEmpty) {
@@ -135,7 +139,7 @@ class SentQueueView extends ConsumerWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.history_rounded,
+                Icons.local_bar_rounded,
                 size: 56,
                 color: emptyColor.withValues(alpha: 0.6),
               ),
@@ -171,6 +175,8 @@ class SentQueueView extends ConsumerWidget {
       itemCount: orders.length,
       itemBuilder: (context, index) {
         final order = orders[index];
+        final isOpen = order.status != OrderStatus.complete;
+
         return Card(
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 12),
@@ -188,15 +194,25 @@ class SentQueueView extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
+                        const Text('🍺 ', style: TextStyle(fontSize: 16)),
                         Text(
-                          'Order #${order.uuid.substring(0, 4).toUpperCase()}',
+                          'TAB: ${order.customerName.toUpperCase()}',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
-                            fontSize: 16,
+                            fontSize: 15,
                             color: theme.textTheme.bodyLarge?.color,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
+                        Text(
+                          '#${order.uuid.substring(0, 4).toUpperCase()}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.hintColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         _buildStatusBadge(order.status),
                       ],
                     ),
@@ -219,45 +235,72 @@ class SentQueueView extends ConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.08,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'EDIT',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: () => _recallOrder(context, db, server, order),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
                               color: theme.colorScheme.primary.withValues(
                                 alpha: 0.1,
                               ),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
-                              'RECALL',
-                              style: TextStyle(
-                                color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 10,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isOpen
+                                      ? Icons.add_rounded
+                                      : Icons.edit_outlined,
+                                  size: 12,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  isOpen ? 'ADD ROUND' : 'EDIT',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                        if (isOpen) ...[
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: () =>
+                                _closeTabDirectly(context, db, server, order),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF16A34A,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 12,
+                                    color: Color(0xFF16A34A),
+                                  ),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'CLOSE TAB',
+                                    style: TextStyle(
+                                      color: Color(0xFF16A34A),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -337,10 +380,10 @@ class SentQueueView extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'TOTAL',
+                              'RUNNING TAB TOTAL',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
-                                fontSize: 14,
+                                fontSize: 13,
                                 color: theme.hintColor,
                               ),
                             ),
@@ -372,7 +415,7 @@ class SentQueueView extends ConsumerWidget {
     switch (status) {
       case OrderStatus.pending:
         color = const Color(0xFFF59E0B);
-        text = 'PENDING';
+        text = 'OPEN TAB';
         break;
       case OrderStatus.partial:
         color = const Color(0xFF3B82F6);
@@ -380,7 +423,7 @@ class SentQueueView extends ConsumerWidget {
         break;
       case OrderStatus.ready:
         color = const Color(0xFF22C55E);
-        text = 'READY';
+        text = 'SERVED';
         break;
       case OrderStatus.complete:
         color = const Color(0xFF6B7280);
@@ -425,7 +468,7 @@ class SentQueueView extends ConsumerWidget {
           id: -1,
           guid: '',
           name: item.name,
-          category: 'History',
+          category: 'Bar',
           defaultStation: item.stationTag,
           modifiers: [],
           price: item.price,
@@ -450,59 +493,60 @@ class SentQueueView extends ConsumerWidget {
         .read(intakeProvider.notifier)
         .loadOrder(order.uuid, order.customerName, intakeItems);
     ref.read(hostTabIndexProvider.notifier).state = 0; // Switch to ORDER tab
-
-    if (context.mounted && Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
   }
 
-  Future<void> _recallOrder(
+  Future<void> _closeTabDirectly(
     BuildContext context,
     KDSDatabase db,
     dynamic server,
     KDSOrderData order,
   ) async {
-    HapticFeedback.mediumImpact();
-
-    final items = await (db.select(
-      db.kDSItems,
-    )..where((t) => t.orderUuid.equals(order.uuid))).get();
-
-    final List<Map<String, dynamic>> jsonItems = items
-        .map(
-          (i) => {
-            'uuid': i.uuid,
-            'name': i.name,
-            'modifiers': i.modifiers,
-            'stationTag': i.stationTag,
-            'status': ItemStatus.pending.index, // Reset to pending for the KDS
-            'price': i.price,
-          },
-        )
-        .toList();
-
-    final broadcastPayload = jsonEncode({
-      'type': 'OrderCreated',
-      'order': {
-        'uuid': order.uuid,
-        'customerName': order.customerName,
-        'timestamp': order.timestamp.toIso8601String(),
-        'status': order.status.index,
-        'items': jsonItems,
-      },
-    });
-
-    server.broadcast(broadcastPayload);
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Sent Order #${order.uuid.substring(0, 4).toUpperCase()} back to Kitchen',
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('CLOSE TAB "${order.customerName.toUpperCase()}"?'),
+        content: const Text('Mark this tab as paid and closed?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
           ),
-          backgroundColor: const Color(0xFF2563EB),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('CLOSE & SETTLE'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      await (db.update(
+        db.kDSOrders,
+      )..where((t) => t.uuid.equals(order.uuid))).write(
+        KDSOrdersCompanion(
+          status: const Value(OrderStatus.complete),
+          updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
         ),
       );
+
+      final broadcastPayload = jsonEncode({
+        'type': 'TicketFinished',
+        'orderUuid': order.uuid,
+      });
+      server.broadcast(broadcastPayload);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Tab "${order.customerName}" Closed & Settled!'),
+            backgroundColor: const Color(0xFF16A34A),
+          ),
+        );
+      }
     }
   }
 }
