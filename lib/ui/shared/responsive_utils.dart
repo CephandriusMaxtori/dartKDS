@@ -34,3 +34,34 @@ class Responsive extends StatelessWidget {
     }
   }
 }
+
+/// Centres page content and stops it stretching across a wide browser window.
+///
+/// The host screens are laid out for a handheld terminal. Served to a desktop
+/// browser they were previously pinned to the full window width, which blew the
+/// card grid and form rows out to unusable sizes.
+class ContentWidth extends StatelessWidget {
+  final Widget child;
+  final double maxWidth;
+
+  const ContentWidth({super.key, required this.child, this.maxWidth = 1200});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Column count for a card grid, derived from the width the grid actually gets
+/// rather than the window width.
+int gridColumnsFor(double availableWidth, {int max = 3, int min = 2}) {
+  if (availableWidth >= 1000) return max;
+  if (availableWidth >= 620) return 2;
+  return min;
+}

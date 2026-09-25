@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:share_plus/share_plus.dart';
 import '../../../models/database.dart';
-import '../../../providers/service_providers.dart';
+import '../../../data/host_store.dart';
+import '../../../providers/host_store_provider.dart';
 
 class InventoryView extends ConsumerWidget {
   const InventoryView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final theme = Theme.of(context);
     final isCompact = MediaQuery.of(context).size.width < 600;
 
@@ -37,7 +37,7 @@ class InventoryView extends ConsumerWidget {
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: () => _exportShoppingList(context, db),
+                  onPressed: () => _exportShoppingList(context, store),
                   icon: const Icon(Icons.list_alt_rounded, size: 18),
                   label: Text(isCompact ? 'LIST' : 'EXPORT LIST', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
                   style: ElevatedButton.styleFrom(
@@ -52,7 +52,7 @@ class InventoryView extends ConsumerWidget {
           ),
           Expanded(
             child: StreamBuilder<List<MenuItemData>>(
-              stream: (db.select(db.menuItems)..where((t) => t.trackStock.equals(true))).watch(),
+              stream: store.watchTrackedStockItems(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final items = snapshot.data!;
@@ -102,13 +102,13 @@ class InventoryView extends ConsumerWidget {
                                 const Divider(height: 24),
                                 Row(
                                   children: [
-                                    _quickAdjust(context, db, item, -1, '-1'),
+                                    _quickAdjust(context, store, item, -1, '-1'),
                                     const SizedBox(width: 8),
-                                    _quickAdjust(context, db, item, 1, '+1'),
+                                    _quickAdjust(context, store, item, 1, '+1'),
                                     const SizedBox(width: 8),
-                                    _quickAdjust(context, db, item, 0, 'Zero', col: Colors.red),
+                                    _quickAdjust(context, store, item, 0, 'Zero', col: Colors.red),
                                     const SizedBox(width: 8),
-                                    Expanded(child: _setButton(context, db, item)),
+                                    Expanded(child: _setButton(context, store, item)),
                                   ],
                                 ),
                               ],
@@ -124,9 +124,9 @@ class InventoryView extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                _quickAdjust(context, db, item, -1, '-1'),
+                                _quickAdjust(context, store, item, -1, '-1'),
                                 const SizedBox(width: 8),
-                                _quickAdjust(context, db, item, 1, '+1'),
+                                _quickAdjust(context, store, item, 1, '+1'),
                                 const SizedBox(width: 16),
                                 Container(
                                   width: 80,
@@ -134,9 +134,9 @@ class InventoryView extends ConsumerWidget {
                                   child: Text('${item.stockQuantity}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: isOut ? Colors.red : theme.textTheme.bodyLarge?.color)),
                                 ),
                                 const SizedBox(width: 16),
-                                _quickAdjust(context, db, item, 0, 'Zero', col: Colors.red),
+                                _quickAdjust(context, store, item, 0, 'Zero', col: Colors.red),
                                 const SizedBox(width: 8),
-                                _setButton(context, db, item),
+                                _setButton(context, store, item),
                               ],
                             ),
                       ),
@@ -151,16 +151,16 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-  Widget _quickAdjust(BuildContext context, KDSDatabase db, MenuItemData item, int val, String label, {Color? col}) {
+  Widget _quickAdjust(BuildContext context, HostStore store, MenuItemData item, int val, String label, {Color? col}) {
     final theme = Theme.of(context);
     final color = col ?? theme.colorScheme.onSurface;
     return InkWell(
       onTap: () {
         HapticFeedback.lightImpact();
         if (label == 'Zero') {
-          _updateStock(db, item, 0);
+          _updateStock(store, item, 0);
         } else {
-          _updateStock(db, item, item.stockQuantity + val);
+          _updateStock(store, item, item.stockQuantity + val);
         }
       },
       borderRadius: BorderRadius.circular(6),
@@ -174,10 +174,10 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-  Widget _setButton(BuildContext context, KDSDatabase db, MenuItemData item) {
+  Widget _setButton(BuildContext context, HostStore store, MenuItemData item) {
     final theme = Theme.of(context);
     return ElevatedButton(
-      onPressed: () => _showSetStockDialog(context, db, item),
+      onPressed: () => _showSetStockDialog(context, store, item),
       style: ElevatedButton.styleFrom(
         backgroundColor: theme.brightness == Brightness.dark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
         foregroundColor: theme.colorScheme.onSurface,
@@ -192,7 +192,7 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-  void _showSetStockDialog(BuildContext context, KDSDatabase db, MenuItemData item) {
+  void _showSetStockDialog(BuildContext context, HostStore store, MenuItemData item) {
     final controller = TextEditingController(text: item.stockQuantity.toString());
     showDialog(
       context: context,
@@ -207,7 +207,7 @@ class InventoryView extends ConsumerWidget {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF111111), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
             onPressed: () {
               final val = int.tryParse(controller.text);
-              if (val != null) { _updateStock(db, item, val); Navigator.pop(context); }
+              if (val != null) { _updateStock(store, item, val); Navigator.pop(context); }
             },
             child: const Text('SAVE'),
           ),
@@ -216,17 +216,13 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-  void _updateStock(KDSDatabase db, MenuItemData item, int newQuantity) async {
-    if (newQuantity < 0) newQuantity = 0;
-    await (db.update(db.menuItems)..where((t) => t.id.equals(item.id))).write(MenuItemsCompanion(
-      stockQuantity: drift.Value(newQuantity),
-      updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-    ));
+    void _updateStock(HostStore store, MenuItemData item, int newQuantity) {
+    store.setStock(item.id, newQuantity);
   }
 
-  void _exportShoppingList(BuildContext context, KDSDatabase db) async {
-    final lowStockItems = await (db.select(db.menuItems)..where((t) => t.trackStock.equals(true))..where((t) => t.stockQuantity.isSmallerOrEqualValue(5))).get();
-    if (lowStockItems.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All items are in stock.'))); return; }
+    void _exportShoppingList(BuildContext context, HostStore store) async {
+    final lowStockItems = await store.getLowStockItems();
+    if (lowStockItems.isEmpty) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All items are in stock.'))); return; }
     final StringBuffer buffer = StringBuffer();
     buffer.writeln('SHOPPING LIST - ${DateTime.now().toString().substring(0, 16)}');
     for (final item in lowStockItems) {

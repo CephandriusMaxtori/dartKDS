@@ -1,18 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:confetti/confetti.dart';
-import 'package:drift/drift.dart' as drift;
 import '../../../models/database.dart';
 import '../../../models/order_status.dart';
-import '../../../models/item_status.dart';
+import '../../../data/host_store.dart';
 import '../../../providers/intake_provider.dart';
-import '../../../providers/service_providers.dart';
+import '../../../providers/host_store_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../shared/responsive_utils.dart';
+
+double parseModifierPrice(String modifier) {
+  final regex = RegExp(r'\+\s*\$?([0-9]+(\.[0-9]+)?)');
+  final match = regex.firstMatch(modifier);
+  if (match != null) {
+    return double.tryParse(match.group(1) ?? '0') ?? 0.0;
+  }
+  return 0.0;
+}
 
 class OrderIntakeView extends ConsumerStatefulWidget {
   const OrderIntakeView({super.key});
@@ -113,7 +120,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   }
 
   Widget _buildMenuSection(BuildContext context) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -220,7 +227,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               if (_filtersExpanded) ...[
                 const SizedBox(height: 8),
                 _buildFilterChipRow(
-                  stream: db.select(db.menuItems).watch().map((items) {
+                  stream: store.watchMenuItems().map((items) {
                     final cats = items
                         .map((i) => i.category.trim().toUpperCase())
                         .where(
@@ -234,7 +241,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 ),
                 const SizedBox(height: 8),
                 _buildFilterChipRow(
-                  stream: db.select(db.menuItems).watch().map((items) {
+                  stream: store.watchMenuItems().map((items) {
                     final tags = items
                         .expand((i) => i.tags)
                         .map((t) => t.trim().toUpperCase())
@@ -251,7 +258,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         ),
         Expanded(
           child: StreamBuilder<List<MenuItemData>>(
-            stream: db.select(db.menuItems).watch(),
+            stream: store.watchMenuItems(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return Center(child: Text('Error: ${snapshot.error}'));
@@ -414,18 +421,17 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   }
 
   Widget _buildOpenTabsBar(BuildContext context) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final intakeState = ref.watch(intakeProvider);
     final theme = Theme.of(context);
 
     return StreamBuilder<List<KDSOrderData>>(
-      stream:
-          (db.select(db.kDSOrders)
-                ..where((t) => t.status.isNotIn([OrderStatus.complete.index]))
-                ..orderBy([(t) => drift.OrderingTerm.desc(t.timestamp)]))
-              .watch(),
+      stream: store.watchOrders(),
       builder: (context, snapshot) {
-        final openOrders = snapshot.data ?? [];
+        final allOrders = snapshot.data ?? [];
+        final openOrders = allOrders
+            .where((o) => o.isTab && o.status != OrderStatus.complete)
+            .toList();
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -539,11 +545,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: StreamBuilder<List<KDSItemData>>(
-                          stream:
-                              (db.select(db.kDSItems)..where(
-                                    (t) => t.orderUuid.equals(order.uuid),
-                                  ))
-                                  .watch(),
+                          stream: store.watchOrderItems(order.uuid),
                           builder: (context, itemSnap) {
                             final items = itemSnap.data ?? [];
                             final orderTotal = items.fold<double>(
@@ -587,7 +589,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                 ],
                               ),
                               onSelected: (_) =>
-                                  _selectOpenTab(context, ref, db, order),
+                                  _selectOpenTab(context, ref, store, order),
                             );
                           },
                         ),
@@ -693,13 +695,11 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   Future<void> _selectOpenTab(
     BuildContext context,
     WidgetRef ref,
-    KDSDatabase db,
+    HostStore store,
     KDSOrderData order,
   ) async {
-    final items = await (db.select(
-      db.kDSItems,
-    )..where((t) => t.orderUuid.equals(order.uuid))).get();
-    final allMenuItems = await db.select(db.menuItems).get();
+    final items = await store.getOrderItems(order.uuid);
+    final allMenuItems = await store.getMenuItems();
 
     final List<IntakeItem> intakeItems = [];
     for (final item in items) {
@@ -745,7 +745,11 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
     double totalPrice = 0;
     for (var item in intakeState.items) {
-      totalPrice += item.menuItem.price * item.quantity;
+      double unitPrice = item.menuItem.price;
+      for (final mod in item.selectedModifiers) {
+        unitPrice += parseModifierPrice(mod);
+      }
+      totalPrice += unitPrice * item.quantity;
     }
 
     final isEditingTab = intakeState.editingOrderUuid != null;
@@ -858,7 +862,9 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              ref.read(intakeProvider.notifier).clear();
+    ref.read(intakeProvider.notifier).clear();
+    if (!context.mounted) return;
+
                             },
                             child: const Text(
                               'CLEAR',
@@ -923,7 +929,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '\$${(item.menuItem.price * item.quantity).toStringAsFixed(2)}',
+                        '\$${(((item.menuItem.price + item.selectedModifiers.fold(0.0, (sum, m) => sum + parseModifierPrice(m))) * item.quantity)).toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(width: 4),
@@ -958,29 +964,55 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: intakeState.items.isEmpty
                               ? theme.dividerColor
-                              : const Color(0xFF2563EB),
+                              : const Color(0xFF10B981),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        icon: const Icon(Icons.send_rounded, size: 16),
-                        label: Text(
-                          isEditingTab ? 'ADD TO TAB' : 'OPEN TAB & SEND',
-                          style: const TextStyle(
+                        icon: const Icon(Icons.bolt_rounded, size: 16),
+                        label: const Text(
+                          'QUICK SEND',
+                          style: TextStyle(
                             fontWeight: FontWeight.w900,
-                            fontSize: 11,
+                            fontSize: 10,
                             letterSpacing: 0.5,
                           ),
                         ),
                         onPressed: intakeState.items.isEmpty
                             ? null
-                            : () =>
-                                  _sendToKitchen(context, ref, closeTab: false),
+                            : () => _sendToKitchen(context, ref, closeTab: false, isTab: false),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: intakeState.items.isEmpty
+                              ? theme.dividerColor
+                              : const Color(0xFF2AA31F),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.bookmark_add_rounded, size: 16),
+                        label: Text(
+                          isEditingTab ? 'UPDATE TAB' : 'OPEN TAB',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 10,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        onPressed: intakeState.items.isEmpty
+                            ? null
+                            : () => _sendToKitchen(context, ref, closeTab: false, isTab: true),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
@@ -988,24 +1020,23 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                               ? theme.dividerColor
                               : const Color(0xFF16A34A),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                         icon: const Icon(Icons.point_of_sale_rounded, size: 16),
                         label: const Text(
-                          'PAY & CLOSE TAB',
+                          'PAY & CLOSE',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
-                            fontSize: 11,
+                            fontSize: 10,
                             letterSpacing: 0.5,
                           ),
                         ),
                         onPressed: intakeState.items.isEmpty
                             ? null
-                            : () =>
-                                  _showPaymentDialog(context, ref, totalPrice),
+                            : () => _showPaymentDialog(context, ref, totalPrice),
                       ),
                     ),
                   ],
@@ -1282,7 +1313,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
   void _handleItemTap(BuildContext context, WidgetRef ref, MenuItemData item) {
     final hasModifiers =
-        item.modifiers.isNotEmpty || (item.requiredModifiers ?? []).isNotEmpty;
+        item.modifiers.isNotEmpty || item.requiredModifiers.isNotEmpty;
     if (!hasModifiers || item.oneTouch) {
       ref.read(intakeProvider.notifier).addItem(item);
       HapticFeedback.lightImpact();
@@ -1311,17 +1342,17 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   }) {
     List<String> selected = List.from(initialSelected ?? []);
     int quantity = initialQuantity;
-    final db = ref.read(databaseProvider);
+    final store = ref.read(hostStoreProvider);
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) =>
             StreamBuilder<List<GlobalModifierData>>(
-              stream: db.select(db.globalModifiers).watch(),
+              stream: store.watchGlobalModifiers(),
               builder: (context, snapshot) {
                 final globals = snapshot.data ?? [];
-                final requiredMods = item.requiredModifiers ?? [];
+                final requiredMods = item.requiredModifiers;
                 final allModifiers = {
                   ...requiredMods,
                   ...item.modifiers,
@@ -1571,122 +1602,45 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     BuildContext context,
     WidgetRef ref, {
     bool closeTab = false,
+    bool isTab = true,
   }) async {
     HapticFeedback.heavyImpact();
     final state = ref.read(intakeProvider);
-    final db = ref.read(databaseProvider);
-    final server = ref.read(hostServerProvider);
 
     final isEditing = state.editingOrderUuid != null;
     final orderUuid = state.editingOrderUuid ?? const Uuid().v4();
-    final timestamp = DateTime.now();
-    final finalStatus = closeTab ? OrderStatus.complete : OrderStatus.pending;
-    final tabName = state.customerName.isEmpty ? 'Guest' : state.customerName;
+    final tabName = state.customerName.isEmpty
+        ? (isTab ? 'Guest' : 'Quick Order')
+        : state.customerName;
 
-    if (isEditing) {
-      final oldItems = await (db.select(
-        db.kDSItems,
-      )..where((t) => t.orderUuid.equals(orderUuid))).get();
-      for (final oldItem in oldItems) {
-        final menuMatches = await (db.select(
-          db.menuItems,
-        )..where((t) => t.name.equals(oldItem.name))).get();
-        if (menuMatches.isNotEmpty && menuMatches.first.trackStock) {
-          await (db.update(
-            db.menuItems,
-          )..where((t) => t.id.equals(menuMatches.first.id))).write(
-            MenuItemsCompanion(
-              stockQuantity: drift.Value(menuMatches.first.stockQuantity + 1),
-              updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-            ),
-          );
-        }
-      }
-      await (db.delete(
-        db.kDSItems,
-      )..where((t) => t.orderUuid.equals(orderUuid))).go();
-      await (db.update(
-        db.kDSOrders,
-      )..where((t) => t.uuid.equals(orderUuid))).write(
-        KDSOrdersCompanion(
-          customerName: drift.Value(tabName),
-          timestamp: drift.Value(timestamp),
-          status: drift.Value(finalStatus),
-          updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
-    } else {
-      await db
-          .into(db.kDSOrders)
-          .insert(
-            KDSOrderData(
-              uuid: orderUuid,
-              customerName: tabName,
-              timestamp: timestamp,
-              status: finalStatus,
-              updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-            ),
-          );
-    }
-
-    final List<Map<String, dynamic>> jsonItems = [];
-    for (final item in state.items) {
-      if (item.menuItem.trackStock) {
-        final fresh = await (db.select(
-          db.menuItems,
-        )..where((t) => t.id.equals(item.menuItem.id))).getSingle();
-        await (db.update(
-          db.menuItems,
-        )..where((t) => t.id.equals(item.menuItem.id))).write(
-          MenuItemsCompanion(
-            stockQuantity: drift.Value(fresh.stockQuantity - item.quantity),
-            updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-          ),
-        );
-      }
-      for (int i = 0; i < item.quantity; i++) {
-        final itemUuid = const Uuid().v4();
-        await db
-            .into(db.kDSItems)
-            .insert(
-              KDSItemsCompanion.insert(
-                uuid: itemUuid,
-                orderUuid: orderUuid,
-                name: item.menuItem.name,
-                modifiers: item.selectedModifiers,
-                stationTag: item.menuItem.defaultStation,
-                status: ItemStatus.pending,
-                price: drift.Value(item.menuItem.price),
-                updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-              ),
-            );
-        jsonItems.add({
-          'uuid': itemUuid,
-          'name': item.menuItem.name,
-          'modifiers': item.selectedModifiers,
-          'stationTag': item.menuItem.defaultStation,
-          'status': ItemStatus.pending.index,
-          'price': item.menuItem.price,
-        });
-      }
-    }
-
-    final broadcastPayload = jsonEncode({
-      'type': closeTab
-          ? 'TicketFinished'
-          : (isEditing ? 'OrderUpdated' : 'OrderCreated'),
-      'orderUuid': orderUuid,
-      'order': {
-        'uuid': orderUuid,
-        'customerName': tabName,
-        'timestamp': timestamp.toIso8601String(),
-        'status': finalStatus.index,
-        'items': jsonItems,
-      },
-    });
-
-    server.broadcast(broadcastPayload);
+    // Stock decrements, tab edits, settling and the kitchen broadcast all live
+    // behind the store, so this is identical on a native host and in a browser.
+    await ref.read(hostStoreProvider).submitOrder(
+      orderUuid: orderUuid,
+      customerName: tabName,
+      lines: state.items
+          .map(
+            (i) {
+              double itemUnitPrice = i.menuItem.price;
+              for (final mod in i.selectedModifiers) {
+                itemUnitPrice += parseModifierPrice(mod);
+              }
+              return OrderLine(
+                menuItemId: i.menuItem.id,
+                name: i.menuItem.name,
+                modifiers: i.selectedModifiers,
+                stationTag: i.menuItem.defaultStation,
+                quantity: i.quantity,
+                price: itemUnitPrice,
+              );
+            },
+          )
+          .toList(),
+      isEditing: isEditing,
+      closeTab: closeTab,
+    );
     ref.read(intakeProvider.notifier).clear();
+    if (!context.mounted) return;
 
     if (ref.read(settingsProvider).enableConfetti) {
       _confettiController.play();

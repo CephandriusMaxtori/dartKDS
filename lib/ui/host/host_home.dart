@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -8,7 +7,9 @@ import 'views/more_view.dart';
 import 'views/sent_queue_view.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
-import '../../providers/service_providers.dart';
+import '../../providers/host_store_provider.dart';
+import '../../providers/service_providers.dart' show startHostServices;
+import '../shared/responsive_utils.dart';
 import '../../models/connected_client.dart';
 
 class HostHome extends ConsumerStatefulWidget {
@@ -29,15 +30,21 @@ class _HostHomeState extends ConsumerState<HostHome> {
   bool _initialized = false;
   Set<String> _knownClientIds = {};
 
+  /// True in the browser, where this device is a remote control for a host
+  /// that is already running elsewhere on the LAN.
+  bool get _isRemote => ref.read(webHostClientProvider) != null;
+
   @override
   void initState() {
     super.initState();
     // On app restart the persisted host role lands directly on HostHome
     // without going through role selection, so (re)start host services here.
+    // Remote (browser) sessions talk to an existing host instead.
     WidgetsBinding.instance.addPostFrameCallback((_) => _startHostServices());
   }
 
   Future<void> _startHostServices() async {
+    if (_isRemote) return;
     try {
       await startHostServices(ref);
     } catch (e) {
@@ -93,7 +100,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(hostServerProvider).stop();
+    await ref.read(hostStoreProvider).shutdownHostServices();
     ref.read(deviceRoleProvider.notifier).setRole(DeviceRole.unset);
   }
 
@@ -175,7 +182,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
               'OK',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF2563EB),
+                color: Color(0xFF2AA31F),
               ),
             ),
           ),
@@ -191,13 +198,15 @@ class _HostHomeState extends ConsumerState<HostHome> {
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
     final currentIndex = ref.watch(hostTabIndexProvider);
 
-    ref.listen<AsyncValue<List<ConnectedClient>>>(connectedClientsProvider, (
-      previous,
-      next,
-    ) {
-      if (previous == null || !next.hasValue) return;
-      _onClientsChanged(next.value ?? []);
-    });
+    // New-client notifications come straight from the active store, so a
+    // browser session reports exactly the same devices as the host device.
+    ref.listen<AsyncValue<List<ConnectedClient>>>(
+      hostClientsProvider,
+      (previous, next) {
+        if (previous == null || !next.hasValue) return;
+        _onClientsChanged(next.value ?? []);
+      },
+    );
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -225,11 +234,12 @@ class _HostHomeState extends ConsumerState<HostHome> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Switch device role',
-            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-            onPressed: () => _confirmSwitchRole(),
-          ),
+          if (!_isRemote)
+            IconButton(
+              tooltip: 'Switch device role',
+              icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+              onPressed: () => _confirmSwitchRole(),
+            ),
           Row(
             children: [
               Text(
@@ -249,14 +259,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
                   activeThumbColor: const Color(0xFFDC2626),
                   onChanged: (val) {
                     ref.read(rushModeProvider.notifier).state = val;
-                    ref
-                        .read(hostServerProvider)
-                        .broadcast(
-                          jsonEncode({
-                            'type': 'RushModeChanged',
-                            'enabled': val,
-                          }),
-                        );
+                    ref.read(hostStoreProvider).setRushMode(val);
                   },
                 ),
               ),
@@ -285,7 +288,7 @@ class _HostHomeState extends ConsumerState<HostHome> {
           ),
         ],
       ),
-      body: _views[currentIndex],
+      body: ContentWidth(maxWidth: 1400, child: _views[currentIndex]),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(

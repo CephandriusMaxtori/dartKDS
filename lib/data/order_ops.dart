@@ -1,0 +1,238 @@
+import 'package:drift/drift.dart' as drift;
+import 'package:uuid/uuid.dart';
+
+import '../models/database.dart';
+import '../models/item_status.dart';
+import '../models/order_status.dart';
+import 'host_store.dart';
+
+/// Order mutations shared by the Drift-backed store (native host device) and
+/// the host server (browser clients). Both call sites must produce identical
+/// database state and identical kitchen broadcasts, so the logic lives here
+/// rather than being duplicated.
+
+/// Creates a tab, appends to an existing one, or settles it. Returns the
+/// `order` payload to broadcast to the kitchen displays.
+Future<Map<String, dynamic>> submitOrderToDatabase({
+  required KDSDatabase db,
+  required String orderUuid,
+  required String customerName,
+  required List<OrderLine> lines,
+  required bool isEditing,
+  required bool closeTab,
+}) {
+  // Stock restore, order rewrite and item inserts have to land together. Without
+  // a transaction a failure part-way through left stock decremented against an
+  // order whose items were never written.
+  return db.transaction(
+    () => _submitOrderInTransaction(
+      db: db,
+      orderUuid: orderUuid,
+      customerName: customerName,
+      lines: lines,
+      isEditing: isEditing,
+      closeTab: closeTab,
+    ),
+  );
+}
+
+Future<Map<String, dynamic>> _submitOrderInTransaction({
+  required KDSDatabase db,
+  required String orderUuid,
+  required String customerName,
+  required List<OrderLine> lines,
+  required bool isEditing,
+  required bool closeTab,
+}) async {
+  final now = DateTime.now();
+  final nowMs = now.millisecondsSinceEpoch;
+  final finalStatus = closeTab ? OrderStatus.complete : OrderStatus.pending;
+
+  if (isEditing) {
+    // Give back the stock the previous version of this tab consumed.
+    final oldItems = await (db.select(
+      db.kDSItems,
+    )..where((t) => t.orderUuid.equals(orderUuid))).get();
+    for (final oldItem in oldItems) {
+      final menuMatches = await (db.select(
+        db.menuItems,
+      )..where((t) => t.name.equals(oldItem.name))).get();
+      if (menuMatches.isNotEmpty && menuMatches.first.trackStock) {
+        await (db.update(
+          db.menuItems,
+        )..where((t) => t.id.equals(menuMatches.first.id))).write(
+          MenuItemsCompanion(
+            stockQuantity: drift.Value(menuMatches.first.stockQuantity + 1),
+            updatedAtMs: drift.Value(nowMs),
+          ),
+        );
+      }
+    }
+    await (db.delete(
+      db.kDSItems,
+    )..where((t) => t.orderUuid.equals(orderUuid))).go();
+    await (db.update(
+      db.kDSOrders,
+    )..where((t) => t.uuid.equals(orderUuid))).write(
+      KDSOrdersCompanion(
+        customerName: drift.Value(customerName),
+        timestamp: drift.Value(now),
+        status: drift.Value(finalStatus),
+        updatedAtMs: drift.Value(nowMs),
+      ),
+    );
+  } else {
+    await db.into(db.kDSOrders).insert(
+      KDSOrderData(
+        uuid: orderUuid,
+        customerName: customerName,
+        timestamp: now,
+        status: finalStatus,
+        isTab: true,
+        updatedAtMs: nowMs,
+      ),
+    );
+  }
+
+  final items = <Map<String, dynamic>>[];
+  for (final line in lines) {
+    if (line.menuItemId >= 0) {
+      final fresh = await (db.select(
+        db.menuItems,
+      )..where((t) => t.id.equals(line.menuItemId))).getSingleOrNull();
+      if (fresh != null && fresh.trackStock) {
+        await (db.update(
+          db.menuItems,
+        )..where((t) => t.id.equals(fresh.id))).write(
+          MenuItemsCompanion(
+            // Clamp: a webhook, a recall or a hand-edited tab can otherwise
+            // drive tracked stock negative and the low-stock view goes wrong.
+            stockQuantity: drift.Value(
+              (fresh.stockQuantity - line.quantity).clamp(0, 1 << 31),
+            ),
+            updatedAtMs: drift.Value(nowMs),
+          ),
+        );
+      }
+    }
+    for (var i = 0; i < line.quantity; i++) {
+      final itemUuid = const Uuid().v4();
+      await db.into(db.kDSItems).insert(
+        KDSItemsCompanion.insert(
+          uuid: itemUuid,
+          orderUuid: orderUuid,
+          name: line.name,
+          modifiers: line.modifiers,
+          stationTag: line.stationTag,
+          status: ItemStatus.pending,
+          price: drift.Value(line.price),
+          updatedAtMs: drift.Value(nowMs),
+        ),
+      );
+      items.add({
+        'uuid': itemUuid,
+        'name': line.name,
+        'modifiers': line.modifiers,
+        'stationTag': line.stationTag,
+        'status': ItemStatus.pending.index,
+        'price': line.price,
+      });
+    }
+  }
+
+  return {
+    'uuid': orderUuid,
+    'customerName': customerName,
+    'timestamp': now.toIso8601String(),
+    'status': finalStatus.index,
+    'items': items,
+  };
+}
+
+/// Settles a tab: items are bumped and the order is marked complete. Shared by
+/// the native store and the `CloseTab`/`TicketFinished` web command so a tab
+/// closed from either surface ends up in the same state on every display.
+Future<void> closeTabInDatabase({
+  required KDSDatabase db,
+  required String orderUuid,
+}) async {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  await (db.update(
+    db.kDSItems,
+  )..where((t) => t.orderUuid.equals(orderUuid))).write(
+    KDSItemsCompanion(
+      status: const drift.Value(ItemStatus.bumped),
+      updatedAtMs: drift.Value(now),
+    ),
+  );
+  await (db.update(
+    db.kDSOrders,
+  )..where((t) => t.uuid.equals(orderUuid))).write(
+    KDSOrdersCompanion(
+      status: const drift.Value(OrderStatus.complete),
+      updatedAtMs: drift.Value(now),
+    ),
+  );
+}
+
+/// Re-opens a settled tab and returns it as a fresh order payload for the
+/// kitchen displays.
+Future<Map<String, dynamic>?> recallOrderInDatabase({
+  required KDSDatabase db,
+  required String orderUuid,
+}) async {
+  final nowMs = DateTime.now().millisecondsSinceEpoch;
+  await (db.update(
+    db.kDSOrders,
+  )..where((t) => t.uuid.equals(orderUuid))).write(
+    KDSOrdersCompanion(
+      status: const drift.Value(OrderStatus.pending),
+      updatedAtMs: drift.Value(nowMs),
+    ),
+  );
+  await (db.update(
+    db.kDSItems,
+  )..where((t) => t.orderUuid.equals(orderUuid))).write(
+    KDSItemsCompanion(
+      status: const drift.Value(ItemStatus.pending),
+      updatedAtMs: drift.Value(nowMs),
+    ),
+  );
+  final order = await (db.select(
+    db.kDSOrders,
+  )..where((t) => t.uuid.equals(orderUuid))).getSingleOrNull();
+  if (order == null) return null;
+  final items = await (db.select(
+    db.kDSItems,
+  )..where((t) => t.orderUuid.equals(orderUuid))).get();
+  return {
+    'uuid': order.uuid,
+    'customerName': order.customerName,
+    'timestamp': order.timestamp.toIso8601String(),
+    'status': order.status.index,
+    'items': items
+        .map(
+          (i) => {
+            'uuid': i.uuid,
+            'name': i.name,
+            'modifiers': i.modifiers,
+            'stationTag': i.stationTag,
+            'status': i.status.index,
+            'price': i.price,
+          },
+        )
+        .toList(),
+  };
+}
+
+Future<void> deleteOrderInDatabase({
+  required KDSDatabase db,
+  required String orderUuid,
+}) async {
+  await (db.delete(
+    db.kDSItems,
+  )..where((t) => t.orderUuid.equals(orderUuid))).go();
+  await (db.delete(
+    db.kDSOrders,
+  )..where((t) => t.uuid.equals(orderUuid))).go();
+}

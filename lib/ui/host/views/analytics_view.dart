@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/database.dart';
-import '../../../providers/service_providers.dart';
+import '../../../providers/host_store_provider.dart';
 
 class AnalyticsView extends ConsumerWidget {
   const AnalyticsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: StreamBuilder<List<ItemSalesStat>>(
-        stream: db.getItemSalesStats(),
+        stream: store.watchItemSalesStats(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -78,7 +78,7 @@ class AnalyticsView extends ConsumerWidget {
                         'ITEMS SOLD',
                         totalSold.toString(),
                         Icons.shopping_basket_rounded,
-                        const Color(0xFF2563EB),
+                        const Color(0xFF2AA31F),
                       ),
                     ],
                   ),
@@ -307,23 +307,5 @@ class AnalyticsView extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
-class _ItemStats {
-  final String name;
-  int quantity;
-  double revenue;
-
-  _ItemStats({
-    required this.name,
-    required this.quantity,
-    required this.revenue,
-  });
-
-  _ItemStats add(double price) {
-    quantity++;
-    revenue += price;
-    return this;
   }
 }

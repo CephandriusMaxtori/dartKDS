@@ -20,6 +20,7 @@ class KDSOrders extends Table {
   DateTimeColumn get timestamp => dateTime()();
   IntColumn get status => intEnum<OrderStatus>()();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
+  BoolColumn get isTab => boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column> get primaryKey => {uuid};
@@ -123,7 +124,7 @@ class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -237,38 +238,46 @@ class KDSDatabase extends _$KDSDatabase {
             await m.addColumn(menuItems, menuItems.oneTouch);
           } catch (e) {}
         }
+        if (from < 12) {
+          try {
+            await m.addColumn(kDSOrders, kDSOrders.isTab);
+          } catch (e) {}
+        }
       },
     );
   }
 
-  Stream<List<ItemSalesStat>> getItemSalesStats() {
-    return select(kDSItems).watch().map((rows) {
-      final statsMap = <String, ItemSalesStat>{};
+  Stream<List<ItemSalesStat>> getItemSalesStats() =>
+      select(kDSItems).watch().map(aggregateItemSalesStats);
 
-      for (final row in rows) {
-        final stat = statsMap.putIfAbsent(
-          row.name,
-          () => ItemSalesStat(
-            name: row.name,
-            quantity: 0,
-            revenue: 0.0,
-            modifierCounts: {},
-          ),
-        );
+  /// Shared by the reactive stream above and the host snapshot, so the native
+  /// and browser analytics tabs always show identical numbers.
+  static List<ItemSalesStat> aggregateItemSalesStats(List<KDSItemData> rows) {
+    final statsMap = <String, ItemSalesStat>{};
 
-        stat.quantity++;
-        stat.revenue += row.price;
-        for (final mod in row.modifiers) {
-          if (mod.isNotEmpty) {
-            stat.modifierCounts[mod] = (stat.modifierCounts[mod] ?? 0) + 1;
-          }
+    for (final row in rows) {
+      final stat = statsMap.putIfAbsent(
+        row.name,
+        () => ItemSalesStat(
+          name: row.name,
+          quantity: 0,
+          revenue: 0.0,
+          modifierCounts: {},
+        ),
+      );
+
+      stat.quantity++;
+      stat.revenue += row.price;
+      for (final mod in row.modifiers) {
+        if (mod.isNotEmpty) {
+          stat.modifierCounts[mod] = (stat.modifierCounts[mod] ?? 0) + 1;
         }
       }
+    }
 
-      final sorted = statsMap.values.toList()
-        ..sort((a, b) => b.revenue.compareTo(a.revenue));
-      return sorted.take(25).toList();
-    });
+    final sorted = statsMap.values.toList()
+      ..sort((a, b) => b.revenue.compareTo(a.revenue));
+    return sorted.take(25).toList();
   }
 }
 

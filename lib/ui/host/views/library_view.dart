@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart' if (dart.library.js_interop) '../../../web_path_provider_stub.dart';
@@ -9,7 +9,8 @@ import 'package:uuid/uuid.dart';
 import 'dart:io' if (dart.library.js_interop) '../../../web_io_stub.dart';
 import '../../../models/database.dart';
 import '../../../providers/app_state_providers.dart';
-import '../../../providers/service_providers.dart';
+import '../../../data/host_store.dart';
+import '../../../providers/host_store_provider.dart';
 
 class LibraryView extends ConsumerStatefulWidget {
   final int initialTab;
@@ -49,11 +50,11 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
 
   @override
   Widget build(BuildContext context) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final theme = Theme.of(context);
 
     return StreamBuilder<List<StationData>>(
-      stream: db.select(db.stations).watch(),
+      stream: store.watchStations(),
       builder: (context, stationSnapshot) {
         if (stationSnapshot.hasError) {
           return Center(
@@ -65,11 +66,14 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
         }
 
         final stations = stationSnapshot.data ?? [];
-        if (stations.isNotEmpty &&
-            (_selectedStation == null ||
-                !stations.any((s) => s.name == _selectedStation))) {
-          _selectedStation = stations.first.name;
-        }
+        // Resolve the effective station locally. This used to assign the
+        // `_selectedStation` field during build, which is a build side effect:
+        // a discarded build left the field mutated anyway, and the routing
+        // dropdown could show a station that was not in the list.
+        final effectiveStation = _selectedStation != null &&
+                stations.any((s) => s.name == _selectedStation)
+            ? _selectedStation
+            : (stations.isNotEmpty ? stations.first.name : null);
 
         final initialTab = ref.watch(libraryTabIndexProvider);
 
@@ -110,10 +114,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
               Expanded(
                 child: TabBarView(
                   children: [
-                    _buildItemsTab(db, theme, stations),
-                    _buildStationsTab(db, theme, stations),
-                    _buildGlobalModifiersTab(db, theme),
-                    _buildBackupTab(db, theme),
+                    _buildItemsTab(store, theme, stations, effectiveStation),
+                    _buildStationsTab(store, theme, stations),
+                    _buildGlobalModifiersTab(store, theme),
+                    _buildBackupTab(store, theme),
                   ],
                 ),
               ),
@@ -125,12 +129,13 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   }
 
   Widget _buildItemsTab(
-    KDSDatabase db,
+    HostStore store,
     ThemeData theme,
     List<StationData> stations,
+    String? effectiveStation,
   ) {
     return StreamBuilder<List<MenuItemData>>(
-      stream: db.select(db.menuItems).watch(),
+      stream: store.watchMenuItems(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
@@ -206,7 +211,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        initialValue: _selectedStation,
+                        initialValue: effectiveStation,
                         decoration: _inputDecoration('Routing Station'),
                         items: stations
                             .map(
@@ -268,7 +273,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           value: _oneTouch,
                           onChanged: (val) => setState(() => _oneTouch = val),
-                          activeThumbColor: const Color(0xFF2563EB),
+                          activeThumbColor: const Color(0xFF2AA31F),
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                         ),
@@ -286,7 +291,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                         ),
                         onPressed: () async {
                           if (_nameController.text.isNotEmpty &&
-                              _selectedStation != null) {
+                              effectiveStation != null) {
                             final mods = _modifiersController.text
                                 .split(',')
                                 .map((e) => e.trim())
@@ -302,33 +307,25 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                 .map((e) => e.trim())
                                 .where((e) => e.isNotEmpty)
                                 .toList();
-                            await db
-                                .into(db.menuItems)
-                                .insert(
-                                  MenuItemsCompanion.insert(
-                                    guid: drift.Value(const Uuid().v4()),
-                                    name: _nameController.text,
-                                    category: _categoryController.text.isEmpty
-                                        ? 'All Items'
-                                        : _categoryController.text.trim(),
-                                    defaultStation: _selectedStation!,
-                                    modifiers: mods,
-                                    requiredModifiers: drift.Value(reqs),
-                                    tags: drift.Value(tags),
-                                    price: drift.Value(
-                                      double.tryParse(_priceController.text) ??
-                                          0.0,
-                                    ),
-                                    stockQuantity: drift.Value(
-                                      int.tryParse(_stockController.text) ?? 0,
-                                    ),
-                                    trackStock: drift.Value(_trackStock),
-                                    oneTouch: drift.Value(_oneTouch),
-                                    updatedAtMs: drift.Value(
-                                      DateTime.now().millisecondsSinceEpoch,
-                                    ),
-                                  ),
-                                );
+                            await store.saveMenuItem(
+                              MenuItemDraft(
+                                guid: const Uuid().v4(),
+                                name: _nameController.text,
+                                category: _categoryController.text.isEmpty
+                                    ? 'All Items'
+                                    : _categoryController.text.trim(),
+                                defaultStation: effectiveStation,
+                                modifiers: mods,
+                                requiredModifiers: reqs,
+                                tags: tags,
+                                price:
+                                    double.tryParse(_priceController.text) ?? 0.0,
+                                stockQuantity:
+                                    int.tryParse(_stockController.text) ?? 0,
+                                trackStock: _trackStock,
+                                oneTouch: _oneTouch,
+                              ),
+                            );
                             _nameController.clear();
                             _modifiersController.clear();
                             _requiredModifiersController.clear();
@@ -389,7 +386,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                               '\$${item.price.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: Color(0xFF2563EB),
+                                color: Color(0xFF2AA31F),
                                 fontSize: 14,
                               ),
                             ),
@@ -419,22 +416,22 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                                     _buildTag(
                                       'ONE TOUCH',
                                       const Color(0xFFEFF6FF),
-                                      const Color(0xFF2563EB),
+                                      const Color(0xFF2AA31F),
                                     ),
                                   ...item.tags.map(
                                     (t) => _buildTag(
                                       t,
                                       const Color(0xFFEFF6FF),
-                                      const Color(0xFF2563EB),
+                                      const Color(0xFF2AA31F),
                                     ),
                                   ),
                                 ],
                               ),
-                              if ((item.requiredModifiers ?? []).isNotEmpty)
+                              if (item.requiredModifiers.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4.0),
                                   child: Text(
-                                    'REQUIRED: ${(item.requiredModifiers ?? []).join(", ")}',
+                                    'REQUIRED: ${item.requiredModifiers.join(", ")}',
                                     style: const TextStyle(
                                       fontSize: 10,
                                       color: Colors.red,
@@ -456,7 +453,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                             MenuItemButton(
                               onPressed: () => _showEditItemDialog(
                                 context,
-                                db,
+                                store,
                                 item,
                                 stations,
                               ),
@@ -473,9 +470,9 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                               ),
                             ),
                             MenuItemButton(
-                              onPressed: () => (db.delete(
-                                db.menuItems,
-                              )..where((t) => t.id.equals(item.id))).go(),
+                              onPressed: () => store.deleteMenuItem(
+                                item.id,
+                              ),
                               leadingIcon: const Icon(
                                 Icons.delete_outline,
                                 color: Colors.red,
@@ -572,7 +569,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   }
 
   Widget _buildStationsTab(
-    KDSDatabase db,
+    HostStore store,
     ThemeData theme,
     List<StationData> stations,
   ) {
@@ -619,16 +616,9 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     ),
                     onPressed: () async {
                       if (_stationController.text.isNotEmpty) {
-                        await db
-                            .into(db.stations)
-                            .insert(
-                              StationsCompanion.insert(
-                                name: _stationController.text.trim(),
-                                updatedAtMs: drift.Value(
-                                  DateTime.now().millisecondsSinceEpoch,
-                                ),
-                              ),
-                            );
+                        await store.saveStation(
+                          name: _stationController.text.trim(),
+                        );
                         _stationController.clear();
                       }
                     },
@@ -672,7 +662,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 20),
                             onPressed: () =>
-                                _showEditStationDialog(context, db, station),
+                                _showEditStationDialog(context, store, station),
                           ),
                           IconButton(
                             icon: const Icon(
@@ -680,9 +670,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                               size: 20,
                               color: Colors.redAccent,
                             ),
-                            onPressed: () => (db.delete(
-                              db.stations,
-                            )..where((t) => t.id.equals(station.id))).go(),
+                            onPressed: () =>
+                                store.deleteStation(station.id),
                           ),
                         ],
                       ),
@@ -697,79 +686,55 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     );
   }
 
-  Widget _buildGlobalModifiersTab(KDSDatabase db, ThemeData theme) {
+  Widget _buildGlobalModifiersTab(HostStore store, ThemeData theme) {
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.dividerColor),
-            ),
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'NEW GLOBAL MODIFIER',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11,
-                    color: Color(0xFF666666),
-                    letterSpacing: 1.2,
-                  ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2AA31F),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  _globalModifierController,
-                  'Modifier Name',
-                  hint: 'e.g. Extra Sauce',
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.add_rounded, size: 22),
+              label: const Text(
+                'ADD MODIFIER',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF111111),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  onPressed: () async {
-                    if (_globalModifierController.text.isNotEmpty) {
-                      await db
-                          .into(db.globalModifiers)
-                          .insert(
-                            GlobalModifiersCompanion.insert(
-                              name: _globalModifierController.text.trim(),
-                              updatedAtMs: drift.Value(
-                                DateTime.now().millisecondsSinceEpoch,
-                              ),
-                            ),
-                          );
-                      _globalModifierController.clear();
-                    }
-                  },
-                  child: const Text(
-                    'SAVE MODIFIER',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ],
+              ),
+              onPressed: () => _showAddModifierDialog(context, store),
             ),
           ),
         ),
         Expanded(
           child: StreamBuilder<List<GlobalModifierData>>(
-            stream: db.select(db.globalModifiers).watch(),
+            stream: store.watchGlobalModifiers(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
               final mods = snapshot.data!;
+              if (mods.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No modifiers yet. Tap "+ ADD MODIFIER" above.',
+                    style: TextStyle(
+                      color: theme.hintColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: mods.length,
@@ -796,9 +761,8 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, size: 20),
-                            onPressed: () => (db.delete(
-                              db.globalModifiers,
-                            )..where((t) => t.id.equals(mod.id))).go(),
+                            onPressed: () =>
+                                store.deleteGlobalModifier(mod.id),
                           ),
                         ),
                       ),
@@ -813,7 +777,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     );
   }
 
-  Widget _buildBackupTab(KDSDatabase db, ThemeData theme) {
+  Widget _buildBackupTab(HostStore store, ThemeData theme) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -841,7 +805,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 ListTile(
                   leading: const Icon(
                     Icons.download_rounded,
-                    color: Color(0xFF2563EB),
+                    color: Color(0xFF2AA31F),
                   ),
                   title: const Text(
                     'EXPORT LIBRARY',
@@ -851,7 +815,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     'Backup menu, stations, and modifiers',
                     style: TextStyle(fontSize: 11),
                   ),
-                  onTap: () => _exportLibrary(db),
+                  onTap: () => _exportLibrary(store),
                 ),
                 Divider(height: 1, color: theme.dividerColor),
                 ListTile(
@@ -867,7 +831,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                     'Restore from a backup file',
                     style: TextStyle(fontSize: 11),
                   ),
-                  onTap: () => _importLibrary(db),
+                  onTap: () => _importLibrary(store),
                 ),
               ],
             ),
@@ -910,7 +874,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 'Wipe all items, stations, and modifiers',
                 style: TextStyle(fontSize: 11),
               ),
-              onTap: () => _showResetLibraryConfirmation(db),
+              onTap: () => _showResetLibraryConfirmation(store),
             ),
           ),
         ),
@@ -918,37 +882,47 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     );
   }
 
-  Future<void> _exportLibrary(KDSDatabase db) async {
+  Future<void> _exportLibrary(HostStore store) async {
     try {
-      final items = await db.select(db.menuItems).get();
-      final stations = await db.select(db.stations).get();
-      final modifiers = await db.select(db.globalModifiers).get();
-      final data = {
-        'version': 1,
-        'menuItems': items
-            .map(
-              (i) => {
-                'guid': i.guid,
-                'name': i.name,
-                'category': i.category,
-                'defaultStation': i.defaultStation,
-                'modifiers': i.modifiers,
-                'requiredModifiers': i.requiredModifiers,
-                'tags': i.tags,
-                'price': i.price,
-                'stockQuantity': i.stockQuantity,
-                'trackStock': i.trackStock,
-                'oneTouch': i.oneTouch,
-              },
-            )
-            .toList(),
-        'stations': stations.map((s) => {'name': s.name}).toList(),
-        'globalModifiers': modifiers.map((m) => {'name': m.name}).toList(),
-      };
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/dartkds_backup.json');
-      await file.writeAsString(jsonEncode(data));
-      await Share.shareXFiles([XFile(file.path)], text: 'DartKDS Backup');
+      final data = await store.exportLibrary();
+
+      final jsonString = jsonEncode(data);
+      final bytes = utf8.encode(jsonString);
+      final fileName = 'dartkds_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
+
+      String? path;
+      try {
+        path = await FilePicker.platform.saveFile(
+          dialogTitle: 'Export DartKDS Backup',
+          fileName: fileName,
+          bytes: bytes,
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+      } catch (_) {
+        // saveFile might not be supported on some platforms
+      }
+
+      if (path != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Backup exported successfully to $path'),
+              backgroundColor: const Color(0xFF22C55E),
+            ),
+          );
+        }
+      } else if (kIsWeb) {
+        return;
+      } else {
+        // Mobile fallback: save to documents directory and share
+        try {
+          final directory = await getApplicationDocumentsDirectory();
+          final file = File('${directory.path}/$fileName');
+          await file.writeAsString(jsonString);
+          await Share.shareXFiles([XFile(file.path)], text: 'DartKDS Backup');
+        } catch (_) {}
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -958,13 +932,15 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     }
   }
 
-  Future<void> _importLibrary(KDSDatabase db) async {
+  Future<void> _importLibrary(HostStore store) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: true,
       );
-      if (result == null || result.files.single.path == null) return;
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
 
       final confirmation = await showDialog<bool>(
         context: context,
@@ -994,78 +970,20 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
 
       if (confirmation != true) return;
 
-      final fileContent = await File(result.files.single.path!).readAsString();
+      String fileContent;
+      if (file.bytes != null) {
+        fileContent = utf8.decode(file.bytes!);
+      } else if (file.path != null) {
+        fileContent = await File(file.path!).readAsString();
+      } else {
+        throw Exception('Could not read selected file');
+      }
+
       final data = jsonDecode(fileContent) as Map<String, dynamic>;
 
       if (data['menuItems'] == null) throw Exception('Invalid backup file');
 
-      await db.transaction(() async {
-        final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-        // Import Stations
-        if (data['stations'] != null) {
-          for (var s in data['stations']) {
-            await db
-                .into(db.stations)
-                .insertOnConflictUpdate(
-                  StationsCompanion.insert(
-                    name: s['name'],
-                    updatedAtMs: drift.Value(nowMs),
-                  ),
-                );
-          }
-        }
-
-        // Import Global Modifiers
-        if (data['globalModifiers'] != null) {
-          for (var m in data['globalModifiers']) {
-            await db
-                .into(db.globalModifiers)
-                .insertOnConflictUpdate(
-                  GlobalModifiersCompanion.insert(
-                    name: m['name'],
-                    updatedAtMs: drift.Value(nowMs),
-                  ),
-                );
-          }
-        }
-
-        // Import Menu Items (Merge by name)
-        final existingItems = await db.select(db.menuItems).get();
-        for (var i in data['menuItems']) {
-          final String name = i['name'] ?? 'Unknown Item';
-          final String guid = i['guid'] ?? const Uuid().v4();
-
-          final existing = existingItems
-              .where((e) => e.name == name)
-              .firstOrNull;
-
-          final companion = MenuItemsCompanion(
-            guid: drift.Value(guid),
-            name: drift.Value(name),
-            category: drift.Value(i['category'] ?? 'All Items'),
-            defaultStation: drift.Value(i['defaultStation'] ?? 'Main Station'),
-            modifiers: drift.Value(List<String>.from(i['modifiers'] ?? [])),
-            requiredModifiers: drift.Value(
-              List<String>.from(i['requiredModifiers'] ?? []),
-            ),
-            tags: drift.Value(List<String>.from(i['tags'] ?? [])),
-            price: drift.Value((i['price'] as num?)?.toDouble() ?? 0.0),
-            stockQuantity: drift.Value(i['stockQuantity'] ?? 0),
-            trackStock: drift.Value(i['trackStock'] ?? false),
-            oneTouch: drift.Value(i['oneTouch'] ?? false),
-            updatedAtMs: drift.Value(nowMs),
-          );
-
-          if (existing != null) {
-            await (db.update(
-              db.menuItems,
-            )..where((t) => t.id.equals(existing.id))).write(companion);
-          } else {
-            await db.into(db.menuItems).insert(companion);
-          }
-        }
-      });
+      await store.importLibrary(data);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1083,11 +1001,13 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
             backgroundColor: Colors.red,
           ),
         );
+        // Log the full stack trace for debugging
+        print('Import failed: $e\nStackTrace: ${StackTrace.current}');
       }
     }
   }
 
-  Future<void> _showResetLibraryConfirmation(KDSDatabase db) async {
+  Future<void> _showResetLibraryConfirmation(HostStore store) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1115,15 +1035,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     );
 
     if (confirmed == true) {
-      await db.transaction(() async {
-        await db.delete(db.menuItems).go();
-        await db.delete(db.stations).go();
-        await db.delete(db.globalModifiers).go();
-        // Re-seed default station
-        await db
-            .into(db.stations)
-            .insert(StationsCompanion.insert(name: 'Main Station'));
-      });
+      await store.clearLibrary();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -1132,9 +1044,61 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
     }
   }
 
+  void _showAddModifierDialog(BuildContext context, HostStore store) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+        title: const Text(
+          'NEW GLOBAL MODIFIER',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: _inputDecoration('Modifier Name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF666666),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF111111),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              await store.saveGlobalModifier(name: name);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('ADD'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
   void _showEditStationDialog(
     BuildContext context,
-    KDSDatabase db,
+    HostStore store,
     StationData station,
   ) {
     final controller = TextEditingController(text: station.name);
@@ -1176,15 +1140,9 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
             ),
             onPressed: () async {
               if (controller.text.isNotEmpty) {
-                await (db.update(
-                  db.stations,
-                )..where((t) => t.id.equals(station.id))).write(
-                  StationsCompanion(
-                    name: drift.Value(controller.text.trim()),
-                    updatedAtMs: drift.Value(
-                      DateTime.now().millisecondsSinceEpoch,
-                    ),
-                  ),
+                await store.saveStation(
+                  id: station.id,
+                  name: controller.text.trim(),
                 );
                 if (context.mounted) Navigator.pop(context);
               }
@@ -1198,14 +1156,14 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
 
   void _showEditItemDialog(
     BuildContext context,
-    KDSDatabase db,
+    HostStore store,
     MenuItemData item,
     List<StationData> stations,
   ) {
     final nameCtrl = TextEditingController(text: item.name);
     final modCtrl = TextEditingController(text: item.modifiers.join(', '));
     final reqModCtrl = TextEditingController(
-      text: (item.requiredModifiers ?? []).join(', '),
+      text: item.requiredModifiers.join(', '),
     );
     final tagsCtrl = TextEditingController(text: item.tags.join(', '));
     final categoryCtrl = TextEditingController(text: item.category);
@@ -1278,7 +1236,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                   ),
                   value: oneTouch,
                   onChanged: (val) => setDialogState(() => oneTouch = val),
-                  activeThumbColor: const Color(0xFF2563EB),
+                  activeThumbColor: const Color(0xFF2AA31F),
                   contentPadding: EdgeInsets.zero,
                 ),
                 const SizedBox(height: 12),
@@ -1331,43 +1289,30 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                       .map((e) => e.trim())
                       .where((e) => e.isNotEmpty)
                       .toList();
-                  await (db.update(
-                    db.menuItems,
-                  )..where((t) => t.id.equals(item.id))).write(
-                    MenuItemsCompanion(
-                      name: drift.Value(nameCtrl.text.trim()),
-                      category: drift.Value(
-                        categoryCtrl.text.isEmpty
-                            ? 'All Items'
-                            : categoryCtrl.text.trim(),
-                      ),
-                      defaultStation: drift.Value(selectedStation),
-                      modifiers: drift.Value(
-                        modCtrl.text
-                            .split(',')
-                            .map((e) => e.trim())
-                            .where((e) => e.isNotEmpty)
-                            .toList(),
-                      ),
-                      requiredModifiers: drift.Value(
-                        reqModCtrl.text
-                            .split(',')
-                            .map((e) => e.trim())
-                            .where((e) => e.isNotEmpty)
-                            .toList(),
-                      ),
-                      tags: drift.Value(tags),
-                      price: drift.Value(
-                        double.tryParse(priceCtrl.text) ?? 0.0,
-                      ),
-                      stockQuantity: drift.Value(
-                        int.tryParse(stockCtrl.text) ?? 0,
-                      ),
-                      trackStock: drift.Value(trackStock),
-                      oneTouch: drift.Value(oneTouch),
-                      updatedAtMs: drift.Value(
-                        DateTime.now().millisecondsSinceEpoch,
-                      ),
+                  await store.saveMenuItem(
+                    MenuItemDraft(
+                      id: item.id,
+                      guid: item.guid,
+                      name: nameCtrl.text.trim(),
+                      category: categoryCtrl.text.isEmpty
+                          ? 'All Items'
+                          : categoryCtrl.text.trim(),
+                      defaultStation: selectedStation,
+                      modifiers: modCtrl.text
+                          .split(',')
+                          .map((e) => e.trim())
+                          .where((e) => e.isNotEmpty)
+                          .toList(),
+                      requiredModifiers: reqModCtrl.text
+                          .split(',')
+                          .map((e) => e.trim())
+                          .where((e) => e.isNotEmpty)
+                          .toList(),
+                      tags: tags,
+                      price: double.tryParse(priceCtrl.text) ?? 0.0,
+                      stockQuantity: int.tryParse(stockCtrl.text) ?? 0,
+                      trackStock: trackStock,
+                      oneTouch: oneTouch,
                     ),
                   );
                   if (context.mounted) Navigator.pop(context);

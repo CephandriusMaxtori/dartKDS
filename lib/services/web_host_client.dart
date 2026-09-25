@@ -1,162 +1,414 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:web_socket_channel/web_socket_channel.dart';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
-import '../providers/app_state_providers.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+import '../data/host_store.dart';
+import '../models/connected_client.dart';
+import '../models/database.dart';
 
 enum WebHostStatus { disconnected, connecting, connected, error }
 
+/// Everything the host pushed in a single `HostSnapshot` message, decoded into
+/// the same Drift data classes the native UI uses.
+class HostSnapshotData {
+  final String hostId;
+  final String role;
+  final List<KDSOrderData> orders;
+  final List<KDSItemData> items;
+  final Map<String, List<KDSItemData>> itemsByOrder;
+  final List<MenuItemData> menu;
+  final List<StationData> stations;
+  final List<GlobalModifierData> modifiers;
+  final List<ConnectedClient> clients;
+  final List<ItemSalesStat> analytics;
+  final List<Map<String, String>> hosts;
+
+  HostSnapshotData({
+    required this.hostId,
+    required this.role,
+    required this.orders,
+    required this.items,
+    required this.itemsByOrder,
+    required this.menu,
+    required this.stations,
+    required this.modifiers,
+    required this.clients,
+    required this.analytics,
+    required this.hosts,
+  });
+
+  factory HostSnapshotData.fromMap(Map<String, dynamic> m) {
+    final orders = <KDSOrderData>[];
+    final items = <KDSItemData>[];
+    final byOrder = <String, List<KDSItemData>>{};
+
+    for (final raw in (m['orders'] as List? ?? [])) {
+      final o = raw is Map ? raw : const {};
+      final order = orderFromMap(o);
+      final orderItems = <KDSItemData>[];
+      for (final rawItem in (o['items'] as List? ?? [])) {
+        if (rawItem is! Map) continue;
+        final item = orderItemFromMap({
+          ...rawItem,
+          'orderUuid': order.uuid,
+        });
+        items.add(item);
+        orderItems.add(item);
+      }
+      orders.add(order);
+      byOrder[order.uuid] = orderItems;
+    }
+
+    return HostSnapshotData(
+      hostId: m['host']?['hostId'] ?? '',
+      role: m['host']?['role'] ?? 'primary',
+      orders: orders,
+      items: items,
+      itemsByOrder: byOrder,
+      menu: (m['menu'] as List? ?? [])
+          .whereType<Map>()
+          .map(menuItemFromMap)
+          .toList(),
+      stations: (m['stations'] as List? ?? [])
+          .whereType<Map>()
+          .map(stationFromMap)
+          .toList(),
+      modifiers: (m['modifiers'] as List? ?? [])
+          .whereType<Map>()
+          .map(globalModifierFromMap)
+          .toList(),
+      clients: (m['clients'] as List? ?? [])
+          .whereType<Map>()
+          .map(clientFromMap)
+          .toList(),
+      analytics: (m['analytics'] as List? ?? [])
+          .whereType<Map>()
+          .map(salesStatFromMap)
+          .toList(),
+      hosts: (m['hosts'] as List? ?? [])
+          .whereType<Map>()
+          .map((h) => h.map((k, v) => MapEntry(k.toString(), v.toString())))
+          .toList(),
+    );
+  }
+}
+
+/// WebSocket bridge between the browser-hosted UI and the native host that
+/// served it. Owns reconnection and caches the latest snapshot so subscribers
+/// that attach late (or re-attach after a rebuild) always receive data.
 class WebHostClient {
   WebSocketChannel? _channel;
   StreamSubscription? _streamSub;
   final _eventsController = StreamController<Map<String, dynamic>>.broadcast();
   final _statusController = StreamController<WebHostStatus>.broadcast();
+  final _snapshotController = StreamController<HostSnapshotData>.broadcast();
   final _clientId = const Uuid().v4();
   String _hostUrl = '';
+  int _hostPort = 8080;
+  String _role = 'primary';
   WebHostStatus _status = WebHostStatus.disconnected;
+  HostSnapshotData? _latest;
+  Timer? _retryTimer;
+  Timer? _heartbeatTimer;
+  bool _disposed = false;
+  int _attempt = 0;
 
   Stream<Map<String, dynamic>> get events => _eventsController.stream;
-  Stream<WebHostStatus> get statusStream => _statusController.stream;
+
+  /// Replays the current status to each new subscriber, then live updates.
+  late final Stream<WebHostStatus> statusStream = Stream<WebHostStatus>.multi((
+    controller,
+  ) {
+    controller.add(_status);
+    final sub = _statusController.stream.listen(
+      controller.add,
+      onError: controller.addError,
+      onDone: controller.close,
+    );
+    controller.onCancel = sub.cancel;
+  });
+
+  /// Snapshot feed that always starts a new subscriber off with the most
+  /// recent snapshot before forwarding live ones.
+  ///
+  /// A `Stream.multi` callback runs per subscription, which is what makes this
+  /// safe: a plain broadcast controller drops the event when it fires with no
+  /// listener yet, and a single-subscription generator can only ever replay to
+  /// its one subscriber. Both left the menu library spinning forever, because
+  /// the first `HostSnapshot` usually lands before the first view subscribes.
+  late final Stream<HostSnapshotData> snapshots = Stream<HostSnapshotData>.multi((
+    controller,
+  ) {
+    final cached = _latest;
+    if (cached != null) controller.add(cached);
+    final sub = _snapshotController.stream.listen(
+      controller.add,
+      onError: controller.addError,
+      onDone: controller.close,
+    );
+    controller.onCancel = sub.cancel;
+  });
+
+  HostSnapshotData? get latestSnapshot => _latest;
+
+  /// Set when a frame arrived but could not be applied. Surfaced by the shell
+  /// so a stalled view can explain itself instead of spinning forever.
+  String? get lastFrameError => _lastFrameError;
+  String? _lastFrameError;
 
   WebHostStatus get status => _status;
 
   bool get isConnected => _status == WebHostStatus.connected;
 
   void _setStatus(WebHostStatus value) {
+    if (_status == value || _disposed) return;
     _status = value;
-    _statusController.add(value);
+    if (!_statusController.isClosed) _statusController.add(value);
   }
 
-  Future<void> connect({String? host, int? port, HostRole? role}) async {
-    await disconnect();
+  Future<void> connect({String? host, int? port, String? role}) async {
+    if (role != null) _role = role;
+    await _open(host ?? Uri.base.host, port ?? _defaultPort);
+  }
+
+  /// Port the page was served from. The host is the thing that served this
+  /// document, so its port is the right default and survives a non-8080 setup.
+  int get _defaultPort => Uri.base.hasPort ? Uri.base.port : 8080;
+
+  Future<void> _open(String host, int port) async {
+    _hostUrl = host;
+    _hostPort = port;
     _setStatus(WebHostStatus.connecting);
 
-    _hostUrl = host ?? Uri.base.host;
-    final portStr = ':${port ?? 8080}';
-    final wsUrl = 'ws://$_hostUrl$portStr/ws';
+    // Drop any previous link first. Reconnecting without this orphaned the old
+    // stream subscription, which kept delivering frames from a dead socket.
+    await _streamSub?.cancel();
+    _streamSub = null;
+    _heartbeatTimer?.cancel();
+
+    final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
+    final wsUrl = Uri(
+      scheme: scheme,
+      host: host,
+      port: port,
+      path: '/ws',
+    );
 
     try {
-      final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      final channel = WebSocketChannel.connect(wsUrl);
       _channel = channel;
       await channel.ready;
 
       _streamSub = channel.stream.listen(
-        (message) {
-          try {
-            final data = jsonDecode(message.toString());
-            if (data['type'] == 'WebHostReady') {
-              _setStatus(WebHostStatus.connected);
-            }
-            _eventsController.add(data);
-          } catch (_) {}
-        },
+        _onMessage,
         onError: (_) {
           _setStatus(WebHostStatus.error);
+          _scheduleReconnect();
         },
         onDone: () {
           _setStatus(WebHostStatus.disconnected);
+          _scheduleReconnect();
         },
+        cancelOnError: true,
       );
 
-      // Register as web host
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+        send({'type': 'ping'});
+      });
+
+      _attempt = 0;
       send({
         'type': 'RegisterWebHost',
         'id': _clientId,
         'deviceName': 'Web Host',
-        if (role != null)
-          'role': role == HostRole.backup ? 'backup' : 'primary',
+        'role': _role,
       });
-    } catch (e) {
+      // The host pushes a snapshot on registration, but ask explicitly in case
+      // that registration raced the listener attaching.
+      requestSnapshot();
+    } catch (_) {
       _setStatus(WebHostStatus.error);
+      _scheduleReconnect();
       rethrow;
     }
   }
 
-  Future<void> disconnect() async {
-    _streamSub?.cancel();
-    _channel?.sink.close();
-    _channel = null;
-    _streamSub = null;
-    _setStatus(WebHostStatus.disconnected);
+  void _onMessage(dynamic message) => handleFrame(message.toString());
+
+  /// Decodes one inbound frame. Public so the snapshot pipeline can be tested
+  /// without a live socket.
+  @visibleForTesting
+  void handleFrame(String raw) {
+    Map<String, dynamic>? event;
+    try {
+      final data = jsonDecode(raw);
+      if (data is! Map) return;
+      event = data.cast<String, dynamic>();
+    } catch (_) {
+      return; // Not JSON at all; nothing useful to do.
+    }
+
+    switch (event['type']) {
+      case 'WebHostReady':
+        _setStatus(WebHostStatus.connected);
+        break;
+
+      case 'HostSnapshot':
+        try {
+          final snapshot = HostSnapshotData.fromMap(event);
+          _latest = snapshot;
+          _lastFrameError = null;
+          if (!_snapshotController.isClosed) _snapshotController.add(snapshot);
+        } catch (e) {
+          // Surface this instead of dropping the frame: a silently discarded
+          // snapshot leaves every view spinning with no explanation.
+          _lastFrameError = 'Malformed host snapshot: $e';
+        }
+        break;
+
+      case 'DataChanged':
+        // The host signals that its database moved on. Pull a fresh snapshot so
+        // menu/station/modifier edits made elsewhere show up here.
+        if (isConnected) requestSnapshot();
+        break;
+
+      case 'SnapshotError':
+        _lastFrameError = 'Host could not build a snapshot: ${event['message']}';
+        break;
+    }
+
+    if (!_eventsController.isClosed) _eventsController.add(event);
   }
 
+  void _scheduleReconnect() {
+    if (_disposed || _retryTimer != null) return;
+    _attempt++;
+    final delay = Duration(milliseconds: (500 * _attempt).clamp(500, 5000));
+    _retryTimer = Timer(delay, () async {
+      _retryTimer = null;
+      if (_disposed) return;
+      try {
+        await _open(_hostUrl.isEmpty ? Uri.base.host : _hostUrl, _hostPort);
+      } catch (_) {
+        _scheduleReconnect();
+      }
+    });
+  }
+
+  void requestSnapshot() => send({'type': 'RequestSnapshot'});
+
+  /// Test seam: intercepts outbound frames so frame handling can be asserted
+  /// without a live socket.
+  @visibleForTesting
+  void Function(Map<String, dynamic>)? debugSendOverride;
+
   void send(dynamic message) {
+    if (message is Map<String, dynamic>) debugSendOverride?.call(message);
     try {
       _channel?.sink.add(jsonEncode(message));
     } catch (_) {}
   }
 
-  void requestSnapshot() {
-    send({'type': 'RequestSnapshot'});
-  }
+  // ── Commands ──────────────────────────────────────────────────
 
-  void createOrder({
+  void submitOrder({
+    required String orderUuid,
     required String customerName,
-    required List<Map<String, dynamic>> items,
+    required List<Map<String, dynamic>> lines,
+    required bool isEditing,
+    required bool closeTab,
   }) {
-    send({'type': 'CreateOrder', 'order': {'customerName': customerName, 'items': items}});
-  }
-
-  void updateOrder({
-    required String uuid,
-    required String customerName,
-    required List<Map<String, dynamic>> items,
-  }) {
-    send({'type': 'UpdateOrder', 'order': {'uuid': uuid, 'customerName': customerName, 'items': items}});
-  }
-
-  void deleteOrder(String orderUuid) {
-    send({'type': 'DeleteOrder', 'orderUuid': orderUuid});
-  }
-
-  void recallOrder(String orderUuid) {
-    send({'type': 'RecallOrder', 'orderUuid': orderUuid});
-  }
-
-  void setStock(int menuId, int quantity) {
-    send({'type': 'SetStock', 'id': menuId, 'quantity': quantity});
-  }
-
-  void saveMenu(Map<String, dynamic> menu) {
-    send({'type': 'SaveMenu', 'menu': menu});
-  }
-
-  void deleteMenu(int id) {
-    send({'type': 'DeleteMenu', 'id': id});
-  }
-
-  void saveStation(Map<String, dynamic> station) {
-    send({'type': 'SaveStation', 'station': station});
-  }
-
-  void deleteStation(int id) {
-    send({'type': 'DeleteStation', 'id': id});
-  }
-
-  void saveModifier(Map<String, dynamic> modifier) {
-    send({'type': 'SaveModifier', 'modifier': modifier});
-  }
-
-  void deleteModifier(int id) {
-    send({'type': 'DeleteModifier', 'id': id});
-  }
-
-  void broadcastMessage(String message, {String? station}) {
     send({
-      'type': 'BroadcastMessage',
-      'message': message,
-      if (station != null && station.isNotEmpty) 'station': station,
+      'type': 'SubmitOrder',
+      'orderUuid': orderUuid,
+      'customerName': customerName,
+      'items': lines,
+      'isEditing': isEditing,
+      'closeTab': closeTab,
     });
   }
 
-  void setRushMode(bool enabled) {
-    send({'type': 'SetRushMode', 'enabled': enabled});
+  void closeTab(String orderUuid) =>
+      send({'type': 'CloseTab', 'orderUuid': orderUuid});
+
+  void deleteOrder(String orderUuid) =>
+      send({'type': 'DeleteOrder', 'orderUuid': orderUuid});
+
+  void recallOrder(String orderUuid) =>
+      send({'type': 'RecallOrder', 'orderUuid': orderUuid});
+
+  void saveMenuItem(Map<String, dynamic> draft) =>
+      send({'type': 'SaveMenuItem', 'draft': draft});
+
+  void deleteMenuItem(int id) => send({'type': 'DeleteMenuItem', 'id': id});
+
+  void setStock(int id, int quantity) =>
+      send({'type': 'SetStock', 'id': id, 'quantity': quantity});
+
+  void saveStation({int? id, required String name}) => send({
+    'type': 'SaveStationItem',
+    'id': id,
+    'name': name,
+  });
+
+  void deleteStation(int id) => send({'type': 'DeleteStationItem', 'id': id});
+
+  void saveGlobalModifier({int? id, required String name}) => send({
+    'type': 'SaveGlobalModifierItem',
+    'id': id,
+    'name': name,
+  });
+
+  void deleteGlobalModifier(int id) =>
+      send({'type': 'DeleteGlobalModifierItem', 'id': id});
+
+  void importLibrary(Map<String, dynamic> data) =>
+      send({'type': 'ImportLibrary', 'data': data});
+
+  void clearLibrary() => send({'type': 'ClearLibrary'});
+
+  void broadcastMessage(String message, {String? station}) => send({
+    'type': 'BroadcastMessage',
+    'message': message,
+    if (station != null && station.isNotEmpty) 'station': station,
+  });
+
+  void setRushMode(bool enabled) =>
+      send({'type': 'SetRushMode', 'enabled': enabled});
+
+  void sendToClient(String clientId, Map<String, dynamic> message) => send({
+    ...message,
+    'type': message['type'] ?? 'DirectMessage',
+    'targetClientId': clientId,
+  });
+
+  // ── Lifecycle ─────────────────────────────────────────────────
+
+  Future<void> disconnect() async {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _heartbeatTimer?.cancel();
+    await _streamSub?.cancel();
+    _streamSub = null;
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    _setStatus(WebHostStatus.disconnected);
   }
 
   void dispose() {
+    _disposed = true;
+    _retryTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _streamSub?.cancel();
     _channel?.sink.close();
     _eventsController.close();
     _statusController.close();
+    _snapshotController.close();
   }
 }

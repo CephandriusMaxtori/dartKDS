@@ -69,6 +69,19 @@ class $KDSOrdersTable extends KDSOrders
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _isTabMeta = const VerificationMeta('isTab');
+  @override
+  late final GeneratedColumn<bool> isTab = GeneratedColumn<bool>(
+    'is_tab',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_tab" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     uuid,
@@ -76,6 +89,7 @@ class $KDSOrdersTable extends KDSOrders
     timestamp,
     status,
     updatedAtMs,
+    isTab,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -125,6 +139,12 @@ class $KDSOrdersTable extends KDSOrders
         ),
       );
     }
+    if (data.containsKey('is_tab')) {
+      context.handle(
+        _isTabMeta,
+        isTab.isAcceptableOrUnknown(data['is_tab']!, _isTabMeta),
+      );
+    }
     return context;
   }
 
@@ -156,6 +176,10 @@ class $KDSOrdersTable extends KDSOrders
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_ms'],
       )!,
+      isTab: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_tab'],
+      )!,
     );
   }
 
@@ -174,12 +198,14 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
   final DateTime timestamp;
   final OrderStatus status;
   final int updatedAtMs;
+  final bool isTab;
   const KDSOrderData({
     required this.uuid,
     required this.customerName,
     required this.timestamp,
     required this.status,
     required this.updatedAtMs,
+    required this.isTab,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -193,6 +219,7 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
       );
     }
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
+    map['is_tab'] = Variable<bool>(isTab);
     return map;
   }
 
@@ -203,6 +230,7 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
       timestamp: Value(timestamp),
       status: Value(status),
       updatedAtMs: Value(updatedAtMs),
+      isTab: Value(isTab),
     );
   }
 
@@ -219,6 +247,7 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
         serializer.fromJson<int>(json['status']),
       ),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
+      isTab: serializer.fromJson<bool>(json['isTab']),
     );
   }
   @override
@@ -232,6 +261,7 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
         $KDSOrdersTable.$converterstatus.toJson(status),
       ),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
+      'isTab': serializer.toJson<bool>(isTab),
     };
   }
 
@@ -241,12 +271,14 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
     DateTime? timestamp,
     OrderStatus? status,
     int? updatedAtMs,
+    bool? isTab,
   }) => KDSOrderData(
     uuid: uuid ?? this.uuid,
     customerName: customerName ?? this.customerName,
     timestamp: timestamp ?? this.timestamp,
     status: status ?? this.status,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    isTab: isTab ?? this.isTab,
   );
   KDSOrderData copyWithCompanion(KDSOrdersCompanion data) {
     return KDSOrderData(
@@ -259,6 +291,7 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
       updatedAtMs: data.updatedAtMs.present
           ? data.updatedAtMs.value
           : this.updatedAtMs,
+      isTab: data.isTab.present ? data.isTab.value : this.isTab,
     );
   }
 
@@ -269,14 +302,15 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
           ..write('customerName: $customerName, ')
           ..write('timestamp: $timestamp, ')
           ..write('status: $status, ')
-          ..write('updatedAtMs: $updatedAtMs')
+          ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('isTab: $isTab')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode =>
-      Object.hash(uuid, customerName, timestamp, status, updatedAtMs);
+      Object.hash(uuid, customerName, timestamp, status, updatedAtMs, isTab);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -285,7 +319,8 @@ class KDSOrderData extends DataClass implements Insertable<KDSOrderData> {
           other.customerName == this.customerName &&
           other.timestamp == this.timestamp &&
           other.status == this.status &&
-          other.updatedAtMs == this.updatedAtMs);
+          other.updatedAtMs == this.updatedAtMs &&
+          other.isTab == this.isTab);
 }
 
 class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
@@ -294,6 +329,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
   final Value<DateTime> timestamp;
   final Value<OrderStatus> status;
   final Value<int> updatedAtMs;
+  final Value<bool> isTab;
   final Value<int> rowid;
   const KDSOrdersCompanion({
     this.uuid = const Value.absent(),
@@ -301,6 +337,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
     this.timestamp = const Value.absent(),
     this.status = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
+    this.isTab = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   KDSOrdersCompanion.insert({
@@ -309,6 +346,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
     required DateTime timestamp,
     required OrderStatus status,
     this.updatedAtMs = const Value.absent(),
+    this.isTab = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : uuid = Value(uuid),
        customerName = Value(customerName),
@@ -320,6 +358,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
     Expression<DateTime>? timestamp,
     Expression<int>? status,
     Expression<int>? updatedAtMs,
+    Expression<bool>? isTab,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -328,6 +367,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
       if (timestamp != null) 'timestamp': timestamp,
       if (status != null) 'status': status,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
+      if (isTab != null) 'is_tab': isTab,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -338,6 +378,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
     Value<DateTime>? timestamp,
     Value<OrderStatus>? status,
     Value<int>? updatedAtMs,
+    Value<bool>? isTab,
     Value<int>? rowid,
   }) {
     return KDSOrdersCompanion(
@@ -346,6 +387,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
       timestamp: timestamp ?? this.timestamp,
       status: status ?? this.status,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      isTab: isTab ?? this.isTab,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -370,6 +412,9 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
     if (updatedAtMs.present) {
       map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
     }
+    if (isTab.present) {
+      map['is_tab'] = Variable<bool>(isTab.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -384,6 +429,7 @@ class KDSOrdersCompanion extends UpdateCompanion<KDSOrderData> {
           ..write('timestamp: $timestamp, ')
           ..write('status: $status, ')
           ..write('updatedAtMs: $updatedAtMs, ')
+          ..write('isTab: $isTab, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2572,6 +2618,7 @@ typedef $$KDSOrdersTableCreateCompanionBuilder =
       required DateTime timestamp,
       required OrderStatus status,
       Value<int> updatedAtMs,
+      Value<bool> isTab,
       Value<int> rowid,
     });
 typedef $$KDSOrdersTableUpdateCompanionBuilder =
@@ -2581,6 +2628,7 @@ typedef $$KDSOrdersTableUpdateCompanionBuilder =
       Value<DateTime> timestamp,
       Value<OrderStatus> status,
       Value<int> updatedAtMs,
+      Value<bool> isTab,
       Value<int> rowid,
     });
 
@@ -2639,6 +2687,11 @@ class $$KDSOrdersTableFilterComposer
 
   ColumnFilters<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isTab => $composableBuilder(
+    column: $table.isTab,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2701,6 +2754,11 @@ class $$KDSOrdersTableOrderingComposer
     column: $table.updatedAtMs,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isTab => $composableBuilder(
+    column: $table.isTab,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$KDSOrdersTableAnnotationComposer
@@ -2730,6 +2788,9 @@ class $$KDSOrdersTableAnnotationComposer
     column: $table.updatedAtMs,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isTab =>
+      $composableBuilder(column: $table.isTab, builder: (column) => column);
 
   Expression<T> kDSItemsRefs<T extends Object>(
     Expression<T> Function($$KDSItemsTableAnnotationComposer a) f,
@@ -2790,6 +2851,7 @@ class $$KDSOrdersTableTableManager
                 Value<DateTime> timestamp = const Value.absent(),
                 Value<OrderStatus> status = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
+                Value<bool> isTab = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => KDSOrdersCompanion(
                 uuid: uuid,
@@ -2797,6 +2859,7 @@ class $$KDSOrdersTableTableManager
                 timestamp: timestamp,
                 status: status,
                 updatedAtMs: updatedAtMs,
+                isTab: isTab,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2806,6 +2869,7 @@ class $$KDSOrdersTableTableManager
                 required DateTime timestamp,
                 required OrderStatus status,
                 Value<int> updatedAtMs = const Value.absent(),
+                Value<bool> isTab = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => KDSOrdersCompanion.insert(
                 uuid: uuid,
@@ -2813,6 +2877,7 @@ class $$KDSOrdersTableTableManager
                 timestamp: timestamp,
                 status: status,
                 updatedAtMs: updatedAtMs,
+                isTab: isTab,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

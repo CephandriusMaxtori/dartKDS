@@ -1,14 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:drift/drift.dart' hide Column;
+import '../../../data/host_store.dart';
 import '../../../models/database.dart';
 import '../../../models/order_status.dart';
 import '../../../providers/app_state_providers.dart';
 import '../../../providers/intake_provider.dart';
-import '../../../providers/service_providers.dart';
+import '../../../providers/host_store_provider.dart';
 import '../../../providers/settings_provider.dart';
 
 class SentQueueView extends ConsumerWidget {
@@ -16,16 +14,14 @@ class SentQueueView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(databaseProvider);
+    final store = ref.watch(hostStoreProvider);
     final settings = ref.watch(settingsProvider);
-    final server = ref.watch(hostServerProvider);
+    
     final theme = Theme.of(context);
     final timeFormat = settings.use24HourFormat ? 'HH:mm' : 'h:mm a';
 
     return StreamBuilder<List<KDSOrderData>>(
-      stream: (db.select(
-        db.kDSOrders,
-      )..orderBy([(t) => OrderingTerm.desc(t.timestamp)])).watch(),
+      stream: store.watchOrders(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -69,8 +65,7 @@ class SentQueueView extends ConsumerWidget {
                     _buildOrderList(
                       context,
                       ref,
-                      db,
-                      server,
+                      store,
                       openOrders,
                       timeFormat,
                       theme,
@@ -81,8 +76,7 @@ class SentQueueView extends ConsumerWidget {
                     _buildOrderList(
                       context,
                       ref,
-                      db,
-                      server,
+                      store,
                       closedOrders,
                       timeFormat,
                       theme,
@@ -93,8 +87,7 @@ class SentQueueView extends ConsumerWidget {
                     _buildOrderList(
                       context,
                       ref,
-                      db,
-                      server,
+                      store,
                       orders,
                       timeFormat,
                       theme,
@@ -115,8 +108,7 @@ class SentQueueView extends ConsumerWidget {
   Widget _buildOrderList(
     BuildContext context,
     WidgetRef ref,
-    KDSDatabase db,
-    dynamic server,
+    HostStore store,
     List<KDSOrderData> orders,
     String timeFormat,
     ThemeData theme,
@@ -232,7 +224,7 @@ class SentQueueView extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         InkWell(
-                          onTap: () => _editOrder(context, ref, db, order),
+                          onTap: () => _editOrder(context, ref, store, order),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -271,7 +263,7 @@ class SentQueueView extends ConsumerWidget {
                           const SizedBox(width: 8),
                           InkWell(
                             onTap: () =>
-                                _closeTabDirectly(context, db, server, order),
+                                _closeTabDirectly(context, store, order),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -312,9 +304,7 @@ class SentQueueView extends ConsumerWidget {
                 const Divider(height: 24),
                 // Items summary
                 StreamBuilder<List<KDSItemData>>(
-                  stream: (db.select(
-                    db.kDSItems,
-                  )..where((t) => t.orderUuid.equals(order.uuid))).watch(),
+                  stream: store.watchOrderItems(order.uuid),
                   builder: (context, itemSnapshot) {
                     if (!itemSnapshot.hasData) {
                       return const SizedBox.shrink();
@@ -422,7 +412,7 @@ class SentQueueView extends ConsumerWidget {
         text = 'OPEN TAB';
         break;
       case OrderStatus.partial:
-        color = const Color(0xFF3B82F6);
+        color = const Color(0xFF2AA31F);
         text = 'IN PROGRESS';
         break;
       case OrderStatus.ready:
@@ -456,13 +446,11 @@ class SentQueueView extends ConsumerWidget {
   Future<void> _editOrder(
     BuildContext context,
     WidgetRef ref,
-    KDSDatabase db,
+    HostStore store,
     KDSOrderData order,
   ) async {
-    final items = await (db.select(
-      db.kDSItems,
-    )..where((t) => t.orderUuid.equals(order.uuid))).get();
-    final allMenuItems = await db.select(db.menuItems).get();
+    final items = await store.getOrderItems(order.uuid);
+    final allMenuItems = await store.getMenuItems();
 
     final List<IntakeItem> intakeItems = [];
     for (final item in items) {
@@ -501,8 +489,7 @@ class SentQueueView extends ConsumerWidget {
 
   Future<void> _closeTabDirectly(
     BuildContext context,
-    KDSDatabase db,
-    dynamic server,
+    HostStore store,
     KDSOrderData order,
   ) async {
     final ok = await showDialog<bool>(
@@ -528,20 +515,7 @@ class SentQueueView extends ConsumerWidget {
     );
 
     if (ok == true) {
-      await (db.update(
-        db.kDSOrders,
-      )..where((t) => t.uuid.equals(order.uuid))).write(
-        KDSOrdersCompanion(
-          status: const Value(OrderStatus.complete),
-          updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
-
-      final broadcastPayload = jsonEncode({
-        'type': 'TicketFinished',
-        'orderUuid': order.uuid,
-      });
-      server.broadcast(broadcastPayload);
+      await store.closeTab(order.uuid);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

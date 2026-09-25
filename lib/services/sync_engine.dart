@@ -30,15 +30,18 @@ class SyncEngine {
   }
 
   Future<String> getChanges(int sinceMs) async {
+    // Clamp the window: a client that has been offline long enough would
+    // otherwise ask for a full-table diff. This value was computed but never
+    // used, so every query below used the raw (possibly ancient) timestamp.
     final windowStart = DateTime.now().millisecondsSinceEpoch - recentWindowMs;
     final effectiveSince = sinceMs < windowStart ? windowStart : sinceMs;
 
     final orders = await (db.select(db.kDSOrders)
-      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(sinceMs))).get();
+      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(effectiveSince))).get();
     final items = await (db.select(db.kDSItems)
-      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(sinceMs))).get();
+      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(effectiveSince))).get();
     final menuItems = await (db.select(db.menuItems)
-      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(sinceMs))).get();
+      ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(effectiveSince))).get();
     final stations = await (db.select(db.stations)
       ..where((t) => t.updatedAtMs.isBiggerOrEqualValue(sinceMs))).get();
     final modifiers = await (db.select(db.globalModifiers)

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/service_providers.dart';
@@ -68,7 +67,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                             description:
                                 'Host database and manage kitchen displays.',
                             icon: Icons.dns_rounded,
-                            accentColor: const Color(0xFF3B82F6),
+                            accentColor: const Color(0xFF2AA31F),
                             role: HostRole.primary,
                           ),
                         ),
@@ -115,7 +114,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                             description:
                                 'This device will host the database and manage all connected displays.',
                             icon: Icons.dns_rounded,
-                            accentColor: const Color(0xFF3B82F6),
+                            accentColor: const Color(0xFF2AA31F),
                             role: HostRole.primary,
                           ),
                           const SizedBox(height: 16),
@@ -335,7 +334,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
         barrierDismissible: false,
         builder: (context) => const Center(
           child: CircularProgressIndicator(
-            color: Color(0xFF2563EB),
+            color: Color(0xFF2AA31F),
             strokeWidth: 3,
           ),
         ),

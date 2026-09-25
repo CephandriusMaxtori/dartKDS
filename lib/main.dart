@@ -5,10 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'providers/app_state_providers.dart';
 import 'providers/settings_provider.dart';
+import 'providers/host_store_provider.dart';
+import 'services/web_host_client.dart';
 import 'ui/host/host_home.dart';
 import 'ui/client/client_home.dart';
 import 'ui/shared/role_selection_screen.dart';
-import 'ui/webhost/web_host_home.dart';
+import 'ui/webhost/web_host_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,14 @@ void main() async {
 
   runApp(
     ProviderScope(
-      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        // The browser build is always a remote control for the host that
+        // served the page, so the store layer resolves to the WebSocket bridge
+        // instead of Drift.
+        if (kIsWeb)
+          webHostClientProvider.overrideWithValue(WebHostClient()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -72,11 +81,11 @@ class MyApp extends ConsumerWidget {
         ),
 
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6),
+          seedColor: const Color(0xFF2AA31F),
           brightness: brightness,
           surface: isDark ? const Color(0xFF0F172A) : Colors.white,
           outline: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-          primary: const Color(0xFF3B82F6),
+          primary: const Color(0xFF2AA31F),
         ),
 
         appBarTheme: AppBarTheme(
@@ -115,7 +124,7 @@ class MyApp extends ConsumerWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
+            borderSide: const BorderSide(color: Color(0xFF16A34A), width: 2),
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -170,7 +179,7 @@ class MyApp extends ConsumerWidget {
           elevation: 0,
           selectedItemColor: isDark
               ? const Color(0xFFF8FAFC)
-              : const Color(0xFF3B82F6),
+              : const Color(0xFF2AA31F),
           unselectedItemColor: isDark
               ? const Color(0xFF94A3B8)
               : const Color(0xFF64748B),
@@ -237,7 +246,6 @@ class MyApp extends ConsumerWidget {
       case DeviceRole.client:
         return const ClientHome();
       case DeviceRole.unset:
-      default:
         return const RoleSelectionScreen();
     }
   }

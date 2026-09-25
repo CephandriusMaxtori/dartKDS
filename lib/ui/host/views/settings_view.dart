@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../providers/settings_provider.dart';
-import '../../../providers/service_providers.dart';
+import '../../../providers/host_store_provider.dart';
 import '../../../models/database.dart';
 import '../../../models/connected_client.dart';
 
@@ -15,7 +15,7 @@ class SettingsView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
-    final clientsAsync = ref.watch(connectedClientsProvider);
+    final clientsAsync = ref.watch(hostClientsProvider);
     final theme = Theme.of(context);
 
     return ListView(
@@ -83,7 +83,7 @@ class SettingsView extends ConsumerWidget {
               ListTile(
                 leading: const Icon(
                   Icons.qr_code_2_rounded,
-                  color: Color(0xFF2563EB),
+                  color: Color(0xFF2AA31F),
                 ),
                 title: const Text(
                   'Pair New Device',
@@ -103,18 +103,29 @@ class SettingsView extends ConsumerWidget {
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox.shrink();
               final interfaces = snapshot.data!;
+              final addresses = interfaces
+                  .expand((i) => i.addresses)
+                  .where((a) => a.type == InternetAddressType.IPv4 && !a.isLoopback)
+                  .toList();
+              addresses.sort((a, b) {
+                int score(String ip) {
+                  if (ip.startsWith('192.168.')) return 0;
+                  if (ip.startsWith('10.')) return 1;
+                  if (ip.startsWith('172.')) return 2;
+                  if (ip.startsWith('169.254.')) return 4;
+                  return 3;
+                }
+                return score(a.address).compareTo(score(b.address));
+              });
               return Column(
                 children: [
-                  ...interfaces
-                      .expand((i) => i.addresses)
-                      .where((a) => a.type == InternetAddressType.IPv4)
-                      .map(
+                  ...addresses.map(
                         (addr) => ListTile(
                           leading: Icon(
                             addr.address.startsWith('192.168.44')
                                 ? Icons.bluetooth_audio
                                 : Icons.wifi,
-                            color: const Color(0xFF2563EB),
+                            color: const Color(0xFF2AA31F),
                           ),
                           title: Text(
                             addr.address,
@@ -167,7 +178,7 @@ class SettingsView extends ConsumerWidget {
             onChanged: (val) => notifier.setKeepScreenOn(val),
             secondary: const Icon(
               Icons.wb_sunny_rounded,
-              color: Color(0xFF2563EB),
+              color: Color(0xFF2AA31F),
             ),
           ),
         ),
@@ -197,7 +208,7 @@ class SettingsView extends ConsumerWidget {
                 onChanged: (val) => notifier.setEnableConfetti(val),
                 secondary: const Icon(
                   Icons.celebration_rounded,
-                  color: Color(0xFF2563EB),
+                  color: Color(0xFF2AA31F),
                 ),
               ),
             ],
@@ -289,7 +300,7 @@ class SettingsView extends ConsumerWidget {
     final interfaces = await NetworkInterface.list();
     final ips = interfaces
         .expand((i) => i.addresses)
-        .where((a) => a.type == InternetAddressType.IPv4)
+        .where((a) => a.type == InternetAddressType.IPv4 && !a.isLoopback)
         .map((a) => a.address)
         .toList();
 
@@ -301,6 +312,17 @@ class SettingsView extends ConsumerWidget {
       }
       return;
     }
+
+    ips.sort((a, b) {
+      int score(String ip) {
+        if (ip.startsWith('192.168.')) return 0;
+        if (ip.startsWith('10.')) return 1;
+        if (ip.startsWith('172.')) return 2;
+        if (ip.startsWith('169.254.')) return 4;
+        return 3;
+      }
+      return score(a).compareTo(score(b));
+    });
 
     String selectedIp = ips.first;
 
@@ -390,12 +412,12 @@ class SettingsView extends ConsumerWidget {
     WidgetRef ref,
     ConnectedClient client,
   ) {
-    final db = ref.read(databaseProvider);
+    final store = ref.read(hostStoreProvider);
 
     showDialog(
       context: context,
       builder: (context) => StreamBuilder<List<StationData>>(
-        stream: db.select(db.stations).watch(),
+        stream: store.watchStations(),
         builder: (context, snapshot) {
           final stations = snapshot.data ?? [];
           return AlertDialog(
@@ -407,7 +429,7 @@ class SettingsView extends ConsumerWidget {
                     (s) => ListTile(
                       title: Text(s.name),
                       onTap: () {
-                        ref.read(hostServerProvider).sendToClient(client.id, {
+                        store.sendToClient(client.id, {
                           'type': 'SetStation',
                           'station': s.name,
                         });

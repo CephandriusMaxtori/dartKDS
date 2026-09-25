@@ -18,6 +18,8 @@ import '../models/database.dart';
 import '../models/connected_client.dart';
 import '../models/order_status.dart';
 import '../models/item_status.dart';
+import '../data/host_store.dart' show MenuItemDraft, OrderLine;
+import '../data/order_ops.dart';
 import 'sync_engine.dart';
 
 const _webUiDirOverride = String.fromEnvironment('WEB_UI_DIR');
@@ -718,6 +720,7 @@ class HostServer {
                         customerName: orderData['customerName'] ?? 'Guest',
                         timestamp: timestamp,
                         status: OrderStatus.pending,
+                        isTab: orderData['isTab'] ?? true,
                         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
                       ),
                     );
@@ -783,6 +786,52 @@ class HostServer {
                   },
                 });
                 broadcast(broadcastPayload);
+              } else if (data['type'] == 'SubmitOrder') {
+                final order = await submitOrderToDatabase(
+                  db: _db!,
+                  orderUuid: (data['orderUuid'] ?? const Uuid().v4()).toString(),
+                  customerName: (data['customerName'] ?? 'Guest').toString(),
+                  lines: (data['items'] as List? ?? [])
+                      .whereType<Map>()
+                      .map(
+                        (i) => OrderLine(
+                          menuItemId: (i['menuItemId'] as num?)?.toInt() ?? -1,
+                          name: (i['name'] ?? '').toString(),
+                          modifiers:
+                              _stringList(i['modifiers']),
+                          stationTag: (i['stationTag'] ?? 'GENERAL')
+                              .toString(),
+                          quantity: (i['quantity'] as num?)?.toInt() ?? 1,
+                          price: (i['price'] as num?)?.toDouble() ?? 0.0,
+                        ),
+                      )
+                      .toList(),
+                  isEditing: data['isEditing'] == true,
+                  closeTab: data['closeTab'] == true,
+                );
+                final orderUuid = order['uuid'];
+                broadcast(
+                  jsonEncode({
+                    'type': data['closeTab'] == true
+                        ? 'TicketFinished'
+                        : (data['isEditing'] == true
+                            ? 'OrderUpdated'
+                            : 'OrderCreated'),
+                    'orderUuid': orderUuid,
+                    'order': order,
+                  }),
+                );
+              } else if (data['type'] == 'CloseTab') {
+                final orderUuid = data['orderUuid'] as String?;
+                if (orderUuid != null) {
+                  await closeTabInDatabase(db: _db!, orderUuid: orderUuid);
+                  broadcast(
+                    jsonEncode({
+                      'type': 'TicketFinished',
+                      'orderUuid': orderUuid,
+                    }),
+                  );
+                }
               } else if (data['type'] == 'ItemBumped') {
                 final itemUuid = data['itemUuid'] as String?;
                 final isBumped = data['isBumped'] == true;
@@ -971,8 +1020,11 @@ class HostServer {
                     ),
                   );
                 }
-              } else if (data['type'] == 'SaveMenu') {
-                final menu = data['menu'] as Map<String, dynamic>;
+              } else if (data['type'] == 'SaveMenu' ||
+                  data['type'] == 'SaveMenuItem') {
+                final menu = data['type'] == 'SaveMenuItem'
+                    ? (data['draft'] as Map).cast<String, dynamic>()
+                    : data['menu'] as Map<String, dynamic>;
                 final menuId = (menu['id'] as num?)?.toInt();
                 final now = DateTime.now().millisecondsSinceEpoch;
                 if (menuId != null) {
@@ -1010,7 +1062,11 @@ class HostServer {
                       .into(_db!.menuItems)
                       .insert(
                         MenuItemsCompanion.insert(
-                          guid: drift.Value(const Uuid().v4()),
+                          guid: drift.Value(
+                            (menu['guid'] as String?)?.isNotEmpty == true
+                                ? menu['guid'] as String
+                                : const Uuid().v4(),
+                          ),
                           name: menu['name'] as String,
                           category: (menu['category'] ?? 'All Items')
                               .toString(),
@@ -1038,15 +1094,20 @@ class HostServer {
                         ),
                       );
                 }
-              } else if (data['type'] == 'DeleteMenu') {
+              } else if (data['type'] == 'DeleteMenu' ||
+                  data['type'] == 'DeleteMenuItem') {
                 final menuId = (data['id'] as num?)?.toInt();
                 if (menuId != null) {
                   await (_db!.delete(
                     _db!.menuItems,
                   )..where((t) => t.id.equals(menuId))).go();
+                  _notifyWebHostDebounced();
                 }
-              } else if (data['type'] == 'SaveStation') {
-                final station = data['station'] as Map<String, dynamic>;
+              } else if (data['type'] == 'SaveStation' ||
+                  data['type'] == 'SaveStationItem') {
+                final station = data['type'] == 'SaveStationItem'
+                    ? data
+                    : data['station'] as Map<String, dynamic>;
                 final stationId = (station['id'] as num?)?.toInt();
                 final name = (station['name'] ?? '').toString().trim();
                 if (name.isEmpty) return;
@@ -1070,15 +1131,20 @@ class HostServer {
                         ),
                       );
                 }
-              } else if (data['type'] == 'DeleteStation') {
+              } else if (data['type'] == 'DeleteStation' ||
+                  data['type'] == 'DeleteStationItem') {
                 final stationId = (data['id'] as num?)?.toInt();
                 if (stationId != null) {
                   await (_db!.delete(
                     _db!.stations,
                   )..where((t) => t.id.equals(stationId))).go();
+                  _notifyWebHostDebounced();
                 }
-              } else if (data['type'] == 'SaveModifier') {
-                final mod = data['modifier'] as Map<String, dynamic>;
+              } else if (data['type'] == 'SaveModifier' ||
+                  data['type'] == 'SaveGlobalModifierItem') {
+                final mod = data['type'] == 'SaveGlobalModifierItem'
+                    ? data
+                    : data['modifier'] as Map<String, dynamic>;
                 final modId = (mod['id'] as num?)?.toInt();
                 final name = (mod['name'] ?? '').toString().trim();
                 if (name.isEmpty) return;
@@ -1102,13 +1168,24 @@ class HostServer {
                         ),
                       );
                 }
-              } else if (data['type'] == 'DeleteModifier') {
+              } else if (data['type'] == 'DeleteModifier' ||
+                  data['type'] == 'DeleteGlobalModifierItem') {
                 final modId = (data['id'] as num?)?.toInt();
                 if (modId != null) {
                   await (_db!.delete(
                     _db!.globalModifiers,
                   )..where((t) => t.id.equals(modId))).go();
+                  _notifyWebHostDebounced();
                 }
+              } else if (data['type'] == 'ImportLibrary') {
+                final payload = (data['data'] as Map?)?.cast<String, dynamic>();
+                if (payload != null) {
+                  await _importLibrary(payload);
+                  _notifyWebHostDebounced();
+                }
+              } else if (data['type'] == 'ClearLibrary') {
+                await _clearLibrary();
+                _notifyWebHostDebounced();
               } else if (data['type'] == 'BroadcastMessage') {
                 final message = data['message'] ?? '';
                 final station = (data['station'] as String? ?? '')
@@ -1179,16 +1256,115 @@ class HostServer {
     this.role = role;
   }
 
+  /// Cached LAN address of this host, for display in the UI.
+  Future<String> get selfUrl async => _cachedSelfUrl ??= await _selfHostUrl();
+  String? _cachedSelfUrl;
+
+  Future<void> _importLibrary(Map<String, dynamic> data) async {
+    final db = _db!;
+    await db.transaction(() async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final s in (data['stations'] as List? ?? [])) {
+        await db.into(db.stations).insertOnConflictUpdate(
+          StationsCompanion.insert(
+            name: (s is Map ? s['name'] : s).toString(),
+            updatedAtMs: drift.Value(now),
+          ),
+        );
+      }
+      for (final m in (data['globalModifiers'] as List? ?? [])) {
+        await db.into(db.globalModifiers).insertOnConflictUpdate(
+          GlobalModifiersCompanion.insert(
+            name: (m is Map ? m['name'] : m).toString(),
+            updatedAtMs: drift.Value(now),
+          ),
+        );
+      }
+      final existing = await db.select(db.menuItems).get();
+      for (final raw in (data['menuItems'] as List? ?? [])) {
+        if (raw is! Map) continue;
+        final companion = MenuItemDraft(
+          guid: (raw['guid'] ?? '').toString(),
+          name: (raw['name'] ?? 'Unknown Item').toString(),
+          category: (raw['category'] ?? 'All Items').toString(),
+          defaultStation: (raw['defaultStation'] ?? 'Main Station').toString(),
+          modifiers: _stringList(raw['modifiers']),
+          requiredModifiers: _stringList(raw['requiredModifiers']),
+          tags: _stringList(raw['tags']),
+          price: (raw['price'] as num?)?.toDouble() ?? 0.0,
+          stockQuantity: (raw['stockQuantity'] as num?)?.toInt() ?? 0,
+          trackStock: raw['trackStock'] == true,
+          oneTouch: raw['oneTouch'] == true,
+        ).toCompanion(now);
+        final match = existing.where((e) => e.name == companion.name.value).firstOrNull;
+        if (match != null) {
+          await (db.update(
+            db.menuItems,
+          )..where((t) => t.id.equals(match.id))).write(companion);
+        } else {
+          await db.into(db.menuItems).insert(
+            MenuItemsCompanion.insert(
+              guid: drift.Value(
+                companion.guid.value.isEmpty
+                    ? const Uuid().v4()
+                    : companion.guid.value,
+              ),
+              name: companion.name.value,
+              category: companion.category.value,
+              defaultStation: companion.defaultStation.value,
+              modifiers: companion.modifiers.value,
+              requiredModifiers: drift.Value(
+                companion.requiredModifiers.value,
+              ),
+              tags: drift.Value(companion.tags.value),
+              price: drift.Value(companion.price.value),
+              stockQuantity: drift.Value(companion.stockQuantity.value),
+              trackStock: drift.Value(companion.trackStock.value),
+              oneTouch: drift.Value(companion.oneTouch.value),
+              updatedAtMs: drift.Value(now),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _clearLibrary() async {
+    final db = _db!;
+    await db.transaction(() async {
+      await db.delete(db.menuItems).go();
+      await db.delete(db.stations).go();
+      await db.delete(db.globalModifiers).go();
+      await db
+          .into(db.stations)
+          .insert(StationsCompanion.insert(name: 'Main Station'));
+    });
+  }
+
   Future<String> _selfHostUrl() async {
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLoopback: false,
       );
+      final ips = <String>[];
       for (final iface in interfaces) {
         for (final addr in iface.addresses) {
-          if (!addr.isLoopback) return 'http://${addr.address}:$_port';
+          if (!addr.isLoopback) ips.add(addr.address);
         }
+      }
+      if (ips.isNotEmpty) {
+        ips.sort((a, b) {
+          int score(String ip) {
+            if (ip.startsWith('192.168.')) return 0;
+            if (ip.startsWith('10.')) return 1;
+            if (ip.startsWith('172.')) return 2;
+            if (ip.startsWith('169.254.')) return 4;
+            return 3;
+          }
+          return score(a).compareTo(score(b));
+        });
+        return 'http://${ips.first}:$_port';
       }
     } catch (_) {}
     return 'http://localhost:$_port';
@@ -1462,6 +1638,7 @@ class HostServer {
     final menu = await db.select(db.menuItems).get();
     final stations = await db.select(db.stations).get();
     final modifiers = await db.select(db.globalModifiers).get();
+    final analytics = KDSDatabase.aggregateItemSalesStats(allItems);
     final hosts = <Map<String, String>>[
       {'hostId': hostId, 'role': role, 'url': ''},
       ...?knownPeersProvider?.call(),
@@ -1476,6 +1653,7 @@ class HostServer {
               'customerName': o.customerName,
               'timestamp': o.timestamp.toIso8601String(),
               'status': o.status.index,
+              'isTab': o.isTab,
               'items': itemsByOrder[o.uuid] ?? [],
             },
           )
@@ -1500,6 +1678,16 @@ class HostServer {
           .toList(),
       'stations': stations.map((s) => {'id': s.id, 'name': s.name}).toList(),
       'modifiers': modifiers.map((m) => {'id': m.id, 'name': m.name}).toList(),
+      'analytics': analytics
+          .map(
+            (a) => {
+              'name': a.name,
+              'quantity': a.quantity,
+              'revenue': a.revenue,
+              'modifierCounts': a.modifierCounts,
+            },
+          )
+          .toList(),
       'clients': _clients
           .map(
             (c) => {
@@ -1517,8 +1705,24 @@ class HostServer {
   void _sendSnapshot(WebSocketChannel ws) async {
     try {
       ws.sink.add(await _buildHostSnapshotJson());
-    } catch (_) {}
+      _lastSnapshotError = null;
+    } catch (e) {
+      // Previously swallowed, which left every browser view on a spinner with
+      // no clue why. Record it so the web host can report the failure.
+      _lastSnapshotError = '$e';
+      print('Host snapshot build failed: $e');
+      try {
+        ws.sink.add(
+          jsonEncode({'type': 'SnapshotError', 'message': '$e'}),
+        );
+      } catch (_) {}
+    }
   }
+
+  String? _lastSnapshotError;
+
+  /// Reason the most recent snapshot push failed, if any.
+  String? get lastSnapshotError => _lastSnapshotError;
 
   void _broadcastFinishedOrders(
     List<KDSOrderData> orders,
@@ -1594,6 +1798,7 @@ class HostServer {
             customerName: customerName,
             timestamp: timestamp,
             status: OrderStatus.pending,
+            isTab: false,
             updatedAtMs: DateTime.now().millisecondsSinceEpoch,
           ),
         );
