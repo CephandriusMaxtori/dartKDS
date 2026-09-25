@@ -267,11 +267,12 @@ class SettingsView extends ConsumerWidget {
   Widget _buildCard(ThemeData theme, Widget child) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ClipRRect(
+      child: Material(
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(10),
-        child: DecoratedBox(
+        clipBehavior: Clip.antiAlias,
+        child: Container(
           decoration: BoxDecoration(
-            color: theme.cardColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: theme.dividerColor),
           ),

@@ -148,7 +148,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                   Align(
                     alignment: Alignment.center,
                     child: Text(
-                      'DARTKDS v1.2.0 • BUILT FOR WARRIORS',
+                      'DARTKDS v1.1.2 • BUILT FOR WARRIORS',
                       style: TextStyle(
                         color: theme.hintColor.withValues(alpha: 0.5),
                         fontSize: 10,

@@ -61,7 +61,7 @@ class MoreView extends ConsumerWidget {
                     crossAxisCount: columns,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 2.2,
+                    childAspectRatio: 1.4,
                     children: [
                       _buildCard(
                         context,
@@ -267,7 +267,7 @@ class MoreView extends ConsumerWidget {
       },
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: theme.cardColor,
           borderRadius: BorderRadius.circular(8),
@@ -275,24 +275,26 @@ class MoreView extends ConsumerWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Icon(icon, color: color, size: 22),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               title,
               style: const TextStyle(
                 fontWeight: FontWeight.w900,
-                fontSize: 13,
+                fontSize: 12,
                 letterSpacing: 0.5,
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               sub,
               style: TextStyle(

@@ -952,6 +952,11 @@ class HostServer {
                 broadcast(
                   jsonEncode({'type': 'OrderDeleted', 'orderUuid': orderUuid}),
                 );
+              } else if (data['type'] == 'ClearSalesAndHistory') {
+                await _db!.delete(_db!.kDSItems).go();
+                await _db!.delete(_db!.kDSOrders).go();
+                broadcast(jsonEncode({'type': 'OrderHistoryCleared'}));
+                _notifyWebHostDebounced();
               } else if (data['type'] == 'RecallOrder') {
                 final orderUuid = data['orderUuid'] as String?;
                 if (orderUuid != null) {

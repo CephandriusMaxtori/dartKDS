@@ -54,6 +54,9 @@ flutter test
 
 ## Project Structure
 
+Docs: [`docs/UI.md`](docs/UI.md) documents every screen, layout, and state.
+[`docs/UI_KNOWN_ISSUES.md`](docs/UI_KNOWN_ISSUES.md) lists UI bugs/inconsistencies not yet fixed.
+
 ```
 lib/
 ├── main.dart                          # Entry point, theme, role routing

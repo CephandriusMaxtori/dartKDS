@@ -160,6 +160,7 @@ abstract class HostStore {
   Future<void> closeTab(String orderUuid);
   Future<void> deleteOrder(String orderUuid);
   Future<void> recallOrder(String orderUuid);
+  Future<void> clearSalesAndHistory();
 
   // ── Kitchen communications ────────────────────────────────────
   void broadcastKitchenMessage(String message, {String? station});

@@ -275,6 +275,10 @@ class RemoteHostStore implements HostStore {
   Future<void> recallOrder(String orderUuid) async =>
       client.recallOrder(orderUuid);
 
+  @override
+  Future<void> clearSalesAndHistory() async =>
+      client.clearSalesAndHistory();
+
   // ── Kitchen communications ────────────────────────────────────
 
   @override

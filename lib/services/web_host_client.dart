@@ -341,6 +341,9 @@ class WebHostClient {
   void recallOrder(String orderUuid) =>
       send({'type': 'RecallOrder', 'orderUuid': orderUuid});
 
+  void clearSalesAndHistory() =>
+      send({'type': 'ClearSalesAndHistory'});
+
   void saveMenuItem(Map<String, dynamic> draft) =>
       send({'type': 'SaveMenuItem', 'draft': draft});
 

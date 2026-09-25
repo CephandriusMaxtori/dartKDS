@@ -351,6 +351,15 @@ class DriftHostStore implements HostStore {
   }
 
   @override
+  Future<void> clearSalesAndHistory() async {
+    await db.transaction(() async {
+      await db.delete(db.kDSItems).go();
+      await db.delete(db.kDSOrders).go();
+    });
+    server.broadcast(jsonEncode({'type': 'OrderHistoryCleared'}));
+  }
+
+  @override
   void broadcastKitchenMessage(String message, {String? station}) {
     final payload = jsonEncode({
       'type': 'KitchenBroadcast',
