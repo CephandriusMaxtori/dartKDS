@@ -15,23 +15,31 @@ Usage:
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+# Force JDK 17 for Gradle/Flutter compatibility
+os.environ["JAVA_HOME"] = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
+
 ROOT = Path(__file__).resolve().parent
 
 
-def run(cmd):
+def run(cmd, cwd=None):
     print(f"\n==> {' '.join(cmd)}", flush=True)
-    first = shutil.which(cmd[0])
-    if first is not None and first.lower().endswith((".bat", ".cmd")):
-        cmd = ["cmd", "/c"] + cmd
+    jdk17 = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
+    target_dir = cwd if cwd is not None else ROOT
+    env = os.environ.copy()
+    env["JAVA_HOME"] = jdk17
+    env["PATH"] = f"{jdk17}\\bin;{env.get('PATH', '')}"
+    full_cmd = ["cmd", "/c", f"set JAVA_HOME={jdk17}&& set PATH={jdk17}\\bin;%PATH%&& " + " ".join(cmd)]
     try:
         proc = subprocess.Popen(
-            cmd,
-            cwd=str(ROOT),
+            full_cmd,
+            cwd=str(target_dir),
+            env=env,
             bufsize=1,
             universal_newlines=True,
             encoding="utf-8",
@@ -72,7 +80,18 @@ def fail(step):
     return 1
 
 
+def cleanup_android_locks():
+    lock_file = Path.home() / ".android" / "debug.keystore.lock"
+    if lock_file.exists():
+        try:
+            lock_file.unlink()
+            print("==> Cleaned up stale debug.keystore.lock")
+        except Exception as e:
+            print(f"Warning: Could not remove lock file: {e}")
+
+
 def main():
+    cleanup_android_locks()
     ap = argparse.ArgumentParser(
         prog="build",
         description="Build DartKDS (Flutter web UI + Android APK).",
@@ -119,13 +138,13 @@ def main():
         print("\nWeb UI built and bundled. Done (--web-only).")
         return 0
 
-    apk_cmd = ["flutter", "build", "apk", "--split-per-abi"]
     if args.debug:
-        apk_cmd.append("--debug")
+        if run(["gradlew.bat", "assembleDebug"], cwd=ROOT / "android") != 0:
+            return fail("APK build")
     else:
-        apk_cmd.append("--release")
-    if run(apk_cmd) != 0:
-        return fail("APK build")
+        if run(["flutter", "build", "apk", "--split-per-abi", "--release"]) != 0:
+            if run(["gradlew.bat", "assembleRelease"], cwd=ROOT / "android") != 0:
+                return fail("APK build")
 
     print("\nBuild complete.")
     return 0

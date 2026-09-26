@@ -87,8 +87,9 @@ class AnalyticsView extends ConsumerWidget {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
@@ -100,7 +101,7 @@ class AnalyticsView extends ConsumerWidget {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
+                                horizontal: 10,
                                 vertical: 8,
                               ),
                             ),
@@ -114,7 +115,6 @@ class AnalyticsView extends ConsumerWidget {
                             ),
                             onPressed: () => _exportSalesReport(context, stats, totalRevenue, totalSold),
                           ),
-                          const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2AA31F),
@@ -138,7 +138,6 @@ class AnalyticsView extends ConsumerWidget {
                             ),
                             onPressed: () => _exportChartPng(context, chartKey),
                           ),
-                          const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: theme.cardColor,
