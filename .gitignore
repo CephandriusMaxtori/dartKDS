@@ -51,3 +51,6 @@ app.*.map.json
 
 # Gradle build reports (regenerated on every build)
 /android/build/
+
+# Local developer Gradle settings
+/android/gradle.properties

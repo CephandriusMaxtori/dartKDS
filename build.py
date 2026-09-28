@@ -21,20 +21,40 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Force JDK 17 for Gradle/Flutter compatibility
-os.environ["JAVA_HOME"] = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
+def get_jdk():
+    candidates = [
+        r"C:\Users\29bragann\Documents\Software\Prism\java\java-runtime-delta",
+        r"C:\Users\29bragann\Documents\Software\android-studio-quail4-windows\android-studio\jbr",
+        os.environ.get("JAVA_HOME", ""),
+    ]
+    for c in candidates:
+        if c and os.path.exists(c) and os.path.exists(os.path.join(c, "bin", "javac.exe")):
+            return c
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return r"C:\Users\29bragann\Documents\Software\Prism\java\java-runtime-delta"
+
+JDK = get_jdk()
+SDK_DIR = r"C:\Users\29bragann\AppData\Local\Android\Sdk"
+os.environ["JAVA_HOME"] = JDK
+os.environ["ANDROID_HOME"] = SDK_DIR
+os.environ["ANDROID_SDK_ROOT"] = SDK_DIR
+os.environ.pop("ANDROID_PREFS_ROOT", None)
 
 ROOT = Path(__file__).resolve().parent
 
 
 def run(cmd, cwd=None):
     print(f"\n==> {' '.join(cmd)}", flush=True)
-    jdk17 = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
     target_dir = cwd if cwd is not None else ROOT
     env = os.environ.copy()
-    env["JAVA_HOME"] = jdk17
-    env["PATH"] = f"{jdk17}\\bin;{env.get('PATH', '')}"
-    full_cmd = ["cmd", "/c", f"set JAVA_HOME={jdk17}&& set PATH={jdk17}\\bin;%PATH%&& " + " ".join(cmd)]
+    env["JAVA_HOME"] = JDK
+    env["ANDROID_HOME"] = SDK_DIR
+    env["ANDROID_SDK_ROOT"] = SDK_DIR
+    env.pop("ANDROID_PREFS_ROOT", None)
+    env["PATH"] = f"{JDK}\\bin;{env.get('PATH', '')}"
+    full_cmd = ["cmd", "/c", f"set JAVA_HOME={JDK}&& set ANDROID_HOME={SDK_DIR}&& set ANDROID_SDK_ROOT={SDK_DIR}&& set ANDROID_PREFS_ROOT=&& set PATH={JDK}\\bin;%PATH%&& " + " ".join(cmd)]
     try:
         proc = subprocess.Popen(
             full_cmd,
