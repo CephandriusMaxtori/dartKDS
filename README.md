@@ -1,7 +1,7 @@
 # DartKDS
 ### The Open Source, Offline Kitchen Display System
 
-![DartKDS Logo](DartKDS.png)
+![DartKDS Logo](Icon.png)
 
 DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed for restaurants, food trucks, and pop-up kitchens. It replaces messy paper tickets with real-time digital screens that work entirely over your local network.
 
