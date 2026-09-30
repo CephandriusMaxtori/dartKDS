@@ -789,7 +789,8 @@ class HostServer {
               } else if (data['type'] == 'SubmitOrder') {
                 final order = await submitOrderToDatabase(
                   db: _db!,
-                  orderUuid: (data['orderUuid'] ?? const Uuid().v4()).toString(),
+                  orderUuid: (data['orderUuid'] ?? const Uuid().v4())
+                      .toString(),
                   customerName: (data['customerName'] ?? 'Guest').toString(),
                   lines: (data['items'] as List? ?? [])
                       .whereType<Map>()
@@ -797,10 +798,8 @@ class HostServer {
                         (i) => OrderLine(
                           menuItemId: (i['menuItemId'] as num?)?.toInt() ?? -1,
                           name: (i['name'] ?? '').toString(),
-                          modifiers:
-                              _stringList(i['modifiers']),
-                          stationTag: (i['stationTag'] ?? 'GENERAL')
-                              .toString(),
+                          modifiers: _stringList(i['modifiers']),
+                          stationTag: (i['stationTag'] ?? 'GENERAL').toString(),
                           quantity: (i['quantity'] as num?)?.toInt() ?? 1,
                           price: (i['price'] as num?)?.toDouble() ?? 0.0,
                         ),
@@ -815,8 +814,8 @@ class HostServer {
                     'type': data['closeTab'] == true
                         ? 'TicketFinished'
                         : (data['isEditing'] == true
-                            ? 'OrderUpdated'
-                            : 'OrderCreated'),
+                              ? 'OrderUpdated'
+                              : 'OrderCreated'),
                     'orderUuid': orderUuid,
                     'order': order,
                   }),
@@ -1270,20 +1269,24 @@ class HostServer {
     await db.transaction(() async {
       final now = DateTime.now().millisecondsSinceEpoch;
       for (final s in (data['stations'] as List? ?? [])) {
-        await db.into(db.stations).insertOnConflictUpdate(
-          StationsCompanion.insert(
-            name: (s is Map ? s['name'] : s).toString(),
-            updatedAtMs: drift.Value(now),
-          ),
-        );
+        await db
+            .into(db.stations)
+            .insertOnConflictUpdate(
+              StationsCompanion.insert(
+                name: (s is Map ? s['name'] : s).toString(),
+                updatedAtMs: drift.Value(now),
+              ),
+            );
       }
       for (final m in (data['globalModifiers'] as List? ?? [])) {
-        await db.into(db.globalModifiers).insertOnConflictUpdate(
-          GlobalModifiersCompanion.insert(
-            name: (m is Map ? m['name'] : m).toString(),
-            updatedAtMs: drift.Value(now),
-          ),
-        );
+        await db
+            .into(db.globalModifiers)
+            .insertOnConflictUpdate(
+              GlobalModifiersCompanion.insert(
+                name: (m is Map ? m['name'] : m).toString(),
+                updatedAtMs: drift.Value(now),
+              ),
+            );
       }
       final existing = await db.select(db.menuItems).get();
       for (final raw in (data['menuItems'] as List? ?? [])) {
@@ -1301,34 +1304,38 @@ class HostServer {
           trackStock: raw['trackStock'] == true,
           oneTouch: raw['oneTouch'] == true,
         ).toCompanion(now);
-        final match = existing.where((e) => e.name == companion.name.value).firstOrNull;
+        final match = existing
+            .where((e) => e.name == companion.name.value)
+            .firstOrNull;
         if (match != null) {
           await (db.update(
             db.menuItems,
           )..where((t) => t.id.equals(match.id))).write(companion);
         } else {
-          await db.into(db.menuItems).insert(
-            MenuItemsCompanion.insert(
-              guid: drift.Value(
-                companion.guid.value.isEmpty
-                    ? const Uuid().v4()
-                    : companion.guid.value,
-              ),
-              name: companion.name.value,
-              category: companion.category.value,
-              defaultStation: companion.defaultStation.value,
-              modifiers: companion.modifiers.value,
-              requiredModifiers: drift.Value(
-                companion.requiredModifiers.value,
-              ),
-              tags: drift.Value(companion.tags.value),
-              price: drift.Value(companion.price.value),
-              stockQuantity: drift.Value(companion.stockQuantity.value),
-              trackStock: drift.Value(companion.trackStock.value),
-              oneTouch: drift.Value(companion.oneTouch.value),
-              updatedAtMs: drift.Value(now),
-            ),
-          );
+          await db
+              .into(db.menuItems)
+              .insert(
+                MenuItemsCompanion.insert(
+                  guid: drift.Value(
+                    companion.guid.value.isEmpty
+                        ? const Uuid().v4()
+                        : companion.guid.value,
+                  ),
+                  name: companion.name.value,
+                  category: companion.category.value,
+                  defaultStation: companion.defaultStation.value,
+                  modifiers: companion.modifiers.value,
+                  requiredModifiers: drift.Value(
+                    companion.requiredModifiers.value,
+                  ),
+                  tags: drift.Value(companion.tags.value),
+                  price: drift.Value(companion.price.value),
+                  stockQuantity: drift.Value(companion.stockQuantity.value),
+                  trackStock: drift.Value(companion.trackStock.value),
+                  oneTouch: drift.Value(companion.oneTouch.value),
+                  updatedAtMs: drift.Value(now),
+                ),
+              );
         }
       }
     });
@@ -1367,6 +1374,7 @@ class HostServer {
             if (ip.startsWith('169.254.')) return 4;
             return 3;
           }
+
           return score(a).compareTo(score(b));
         });
         return 'http://${ips.first}:$_port';
@@ -1389,7 +1397,7 @@ class HostServer {
         if (Directory(candidate).existsSync()) return candidate;
       } catch (_) {}
     }
-    return candidates.isEmpty ? null : candidates.first;
+    return null;
   }
 
   Future<Response> _serveIndex() async {
@@ -1433,7 +1441,8 @@ class HostServer {
     }
     final bundled = await _bundleAsset(path);
     if (bundled != null) return _webResponse(path, bundled);
-    if (path == 'index.html') return _serveIndex();
+    final ext = p.extension(path);
+    if (ext.isEmpty || path == 'index.html') return _serveIndex();
     return Response.notFound('Not found');
   }
 
@@ -1717,9 +1726,7 @@ class HostServer {
       _lastSnapshotError = '$e';
       print('Host snapshot build failed: $e');
       try {
-        ws.sink.add(
-          jsonEncode({'type': 'SnapshotError', 'message': '$e'}),
-        );
+        ws.sink.add(jsonEncode({'type': 'SnapshotError', 'message': '$e'}));
       } catch (_) {}
     }
   }
