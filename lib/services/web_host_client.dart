@@ -320,7 +320,6 @@ class WebHostClient {
     required String customerName,
     required List<Map<String, dynamic>> lines,
     required bool isEditing,
-    required bool closeTab,
   }) {
     send({
       'type': 'SubmitOrder',
@@ -328,12 +327,8 @@ class WebHostClient {
       'customerName': customerName,
       'items': lines,
       'isEditing': isEditing,
-      'closeTab': closeTab,
     });
   }
-
-  void closeTab(String orderUuid) =>
-      send({'type': 'CloseTab', 'orderUuid': orderUuid});
 
   void deleteOrder(String orderUuid) =>
       send({'type': 'DeleteOrder', 'orderUuid': orderUuid});

@@ -720,7 +720,6 @@ class HostServer {
                         customerName: orderData['customerName'] ?? 'Guest',
                         timestamp: timestamp,
                         status: OrderStatus.pending,
-                        isTab: orderData['isTab'] ?? true,
                         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
                       ),
                     );
@@ -806,31 +805,17 @@ class HostServer {
                       )
                       .toList(),
                   isEditing: data['isEditing'] == true,
-                  closeTab: data['closeTab'] == true,
                 );
                 final orderUuid = order['uuid'];
                 broadcast(
                   jsonEncode({
-                    'type': data['closeTab'] == true
-                        ? 'TicketFinished'
-                        : (data['isEditing'] == true
-                              ? 'OrderUpdated'
-                              : 'OrderCreated'),
+                    'type': data['isEditing'] == true
+                        ? 'OrderUpdated'
+                        : 'OrderCreated',
                     'orderUuid': orderUuid,
                     'order': order,
                   }),
                 );
-              } else if (data['type'] == 'CloseTab') {
-                final orderUuid = data['orderUuid'] as String?;
-                if (orderUuid != null) {
-                  await closeTabInDatabase(db: _db!, orderUuid: orderUuid);
-                  broadcast(
-                    jsonEncode({
-                      'type': 'TicketFinished',
-                      'orderUuid': orderUuid,
-                    }),
-                  );
-                }
               } else if (data['type'] == 'ItemBumped') {
                 final itemUuid = data['itemUuid'] as String?;
                 final isBumped = data['isBumped'] == true;
@@ -1667,7 +1652,6 @@ class HostServer {
               'customerName': o.customerName,
               'timestamp': o.timestamp.toIso8601String(),
               'status': o.status.index,
-              'isTab': o.isTab,
               'items': itemsByOrder[o.uuid] ?? [],
             },
           )
@@ -1810,7 +1794,6 @@ class HostServer {
             customerName: customerName,
             timestamp: timestamp,
             status: OrderStatus.pending,
-            isTab: false,
             updatedAtMs: DateTime.now().millisecondsSinceEpoch,
           ),
         );

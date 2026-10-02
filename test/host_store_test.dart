@@ -19,7 +19,6 @@ String snapshotFrame({
         'customerName': 'Guest',
         'timestamp': DateTime(2026, 1, 1).toIso8601String(),
         'status': 0,
-        'isTab': true,
         'items': [
           {
             'uuid': 'i1',

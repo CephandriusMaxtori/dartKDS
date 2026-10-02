@@ -253,19 +253,14 @@ class RemoteHostStore implements HostStore {
     required String customerName,
     required List<OrderLine> lines,
     required bool isEditing,
-    required bool closeTab,
   }) async {
     client.submitOrder(
       orderUuid: orderUuid,
       customerName: customerName,
       lines: lines.map((l) => l.toMap()).toList(),
       isEditing: isEditing,
-      closeTab: closeTab,
     );
   }
-
-  @override
-  Future<void> closeTab(String orderUuid) async => client.closeTab(orderUuid);
 
   @override
   Future<void> deleteOrder(String orderUuid) async =>

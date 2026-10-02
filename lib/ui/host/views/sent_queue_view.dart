@@ -27,7 +27,7 @@ class SentQueueView extends ConsumerWidget {
           return const Center(child: CircularProgressIndicator());
         }
         final orders = snapshot.data!;
-        final openOrders = orders
+        final activeOrders = orders
             .where((o) => o.status != OrderStatus.complete)
             .toList();
         final closedOrders = orders
@@ -53,8 +53,8 @@ class SentQueueView extends ConsumerWidget {
                     letterSpacing: 0.5,
                   ),
                   tabs: [
-                    Tab(text: 'OPEN TABS (${openOrders.length})'),
-                    Tab(text: 'CLOSED TABS (${closedOrders.length})'),
+                    Tab(text: 'ACTIVE (${activeOrders.length})'),
+                    Tab(text: 'CLOSED (${closedOrders.length})'),
                     Tab(text: 'ALL (${orders.length})'),
                   ],
                 ),
@@ -66,12 +66,11 @@ class SentQueueView extends ConsumerWidget {
                       context,
                       ref,
                       store,
-                      openOrders,
+                      activeOrders,
                       timeFormat,
                       theme,
-                      'No Open Tabs',
-                      'Active tabs waiting to be settled will appear here.',
-                      isOpenTabSection: true,
+                      'No Active Orders',
+                      'Orders still in the kitchen will appear here.',
                     ),
                     _buildOrderList(
                       context,
@@ -80,9 +79,8 @@ class SentQueueView extends ConsumerWidget {
                       closedOrders,
                       timeFormat,
                       theme,
-                      'No Closed Tabs',
-                      'Settled customer tabs will appear here.',
-                      isOpenTabSection: false,
+                      'No Closed Orders',
+                      'Finished orders will appear here.',
                     ),
                     _buildOrderList(
                       context,
@@ -91,9 +89,8 @@ class SentQueueView extends ConsumerWidget {
                       orders,
                       timeFormat,
                       theme,
-                      'No Tabs Found',
-                      'Customer tabs will appear here.',
-                      isOpenTabSection: false,
+                      'No Orders',
+                      'Submitted orders will appear here.',
                     ),
                   ],
                 ),
@@ -113,9 +110,8 @@ class SentQueueView extends ConsumerWidget {
     String timeFormat,
     ThemeData theme,
     String emptyTitle,
-    String emptySub, {
-    required bool isOpenTabSection,
-  }) {
+    String emptySub,
+  ) {
     final emptyColor = theme.hintColor;
 
     if (orders.isEmpty) {
@@ -166,7 +162,7 @@ class SentQueueView extends ConsumerWidget {
       itemCount: orders.length,
       itemBuilder: (context, index) {
         final order = orders[index];
-        final isOpen = order.status != OrderStatus.complete;
+        final isActive = order.status != OrderStatus.complete;
 
         return Card(
           elevation: 0,
@@ -192,7 +188,7 @@ class SentQueueView extends ConsumerWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'TAB: ${order.customerName.toUpperCase()}',
+                          order.customerName.toUpperCase(),
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 15,
@@ -240,7 +236,7 @@ class SentQueueView extends ConsumerWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  isOpen
+                                  isActive
                                       ? Icons.add_rounded
                                       : Icons.edit_outlined,
                                   size: 12,
@@ -248,7 +244,7 @@ class SentQueueView extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  isOpen ? 'ADD TO TAB' : 'EDIT',
+                                  isActive ? 'ADD ITEMS' : 'EDIT',
                                   style: TextStyle(
                                     color: theme.colorScheme.primary,
                                     fontWeight: FontWeight.w900,
@@ -259,44 +255,6 @@ class SentQueueView extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (isOpen) ...[
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: () =>
-                                _closeTabDirectly(context, store, order),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF16A34A,
-                                ).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.check_circle_outline_rounded,
-                                    size: 12,
-                                    color: Color(0xFF16A34A),
-                                  ),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'CLOSE TAB',
-                                    style: TextStyle(
-                                      color: Color(0xFF16A34A),
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -374,7 +332,7 @@ class SentQueueView extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'TAB TOTAL',
+                              'TOTAL',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 13,
@@ -409,7 +367,7 @@ class SentQueueView extends ConsumerWidget {
     switch (status) {
       case OrderStatus.pending:
         color = const Color(0xFFF59E0B);
-        text = 'OPEN TAB';
+        text = 'ACTIVE';
         break;
       case OrderStatus.partial:
         color = const Color(0xFF2AA31F);
@@ -485,46 +443,5 @@ class SentQueueView extends ConsumerWidget {
         .read(intakeProvider.notifier)
         .loadOrder(order.uuid, order.customerName, intakeItems);
     ref.read(hostTabIndexProvider.notifier).state = 0; // Switch to ORDER tab
-  }
-
-  Future<void> _closeTabDirectly(
-    BuildContext context,
-    HostStore store,
-    KDSOrderData order,
-  ) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('CLOSE TAB "${order.customerName.toUpperCase()}"?'),
-        content: const Text('Mark this tab as paid and closed?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('CLOSE & SETTLE'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true) {
-      await store.closeTab(order.uuid);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Tab "${order.customerName}" Closed & Settled!'),
-            backgroundColor: const Color(0xFF16A34A),
-          ),
-        );
-      }
-    }
   }
 }

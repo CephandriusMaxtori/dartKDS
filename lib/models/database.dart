@@ -20,7 +20,6 @@ class KDSOrders extends Table {
   DateTimeColumn get timestamp => dateTime()();
   IntColumn get status => intEnum<OrderStatus>()();
   IntColumn get updatedAtMs => integer().withDefault(const Constant(0))();
-  BoolColumn get isTab => boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column> get primaryKey => {uuid};
@@ -123,8 +122,12 @@ class NullableListStringConverter extends TypeConverter<List<String>, String?> {
 class KDSDatabase extends _$KDSDatabase {
   KDSDatabase() : super(_openConnection());
 
+  /// Opens an in-memory database so migrations can be exercised in tests
+  /// without touching the device's `db.sqlite`.
+  KDSDatabase.forTesting(super.executor);
+
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration {
@@ -238,10 +241,21 @@ class KDSDatabase extends _$KDSDatabase {
             await m.addColumn(menuItems, menuItems.oneTouch);
           } catch (e) {}
         }
-        if (from < 12) {
+        if (from < 13) {
+          // Version 13 retired the tabs feature, so the `is_tab` flag is gone.
+          // `ALTER TABLE ... DROP COLUMN` needs SQLite 3.35+, which holds: the
+          // Android build bundles its own libsqlite3 via `sqlite3_flutter_libs`
+          // rather than using the system one. Rebuilding the table instead
+          // would trip the `k_d_s_items.order_uuid` foreign key, since dropping
+          // a parent table under `PRAGMA foreign_keys = ON` deletes its rows.
           try {
-            await m.addColumn(kDSOrders, kDSOrders.isTab);
-          } catch (e) {}
+            await m.database.customStatement(
+              'ALTER TABLE "k_d_s_orders" DROP COLUMN "is_tab"',
+            );
+          } catch (e) {
+            // Nothing declares is_tab any more, so a database that predates
+            // version 12 never had the column to begin with.
+          }
         }
       },
     );

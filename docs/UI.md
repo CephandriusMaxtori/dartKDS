@@ -172,7 +172,6 @@ App bar title `TERMINAL`. Three-column composition:
 ```
 Row
 ├── Expanded(flex 3)  menu section
-│     ├── Open tabs bar
 │     ├── Search + filters
 │     └── Menu grid
 └── 360px cart panel   (width ≥ 600 and cart non-empty, 2px left divider)
@@ -181,16 +180,7 @@ Positioned bottom cart bar (width < 600 and cart non-empty, height = 40% of scre
 
 On phones the cart renders as a bottom panel with a 2px top border and a soft shadow.
 
-### 6.1 Open tabs bar
-
-- Header: `receipt_long` icon + `OPEN TABS (n)` (11, w900).
-- `NEW TAB` button (primary at 15% alpha, 0.4 alpha border) → `START NEW TAB` dialog with
-  quick chips `TABLE 1`, `TABLE 2`, `TABLE 3`, `TAKE OUT`, `COUNTER`, `DRIVE THRU`.
-- 38px horizontal chip strip: `QUICK ORDER` chip (selected when the intake is empty) plus one
-  chip per open tab showing `NAME · $TOTAL` with a person icon, total computed live from
-  `watchOrderItems`. Selected chip = primary at 20% alpha with a 2px primary border.
-
-### 6.2 Search and filters
+### 6.1 Search and filters
 
 - Search field, hint `Search menu...`, prefix `search` icon, dark fill `#1A1A1A`, dense, with a
   **300ms debounce**.
@@ -200,7 +190,7 @@ On phones the cart renders as a bottom panel with a 2px top border and a soft sh
   `ALL ITEMS`) and tag (from `item.tags`). Chips prefixed with `ALL`; selected = `#111111`
   background with white `w900` text, unselected = transparent with divider border.
 
-### 6.3 Menu grid
+### 6.2 Menu grid
 
 `GridView.builder`, padding 10, spacing 8, `childAspectRatio: 1.0`. Columns from width:
 
@@ -220,32 +210,34 @@ Tile (radius 16, 1.5px border, padding 16):
 - **Out of stock** (`trackStock && stockQuantity <= 0`): surface greyed, border transparent,
   `onTap: null`, name and price in hint color.
 
-Tap behavior: items with no modifiers, or with `oneTouch`, are added straight to the tab
-(light haptic, `Added to Tab: <name>` snackbar). Everything else opens the modifier dialog.
+Tap behavior: items with no modifiers, or with `oneTouch`, are added straight to the cart
+(light haptic, `Added: <name>` snackbar). Everything else opens the modifier dialog.
 
-### 6.4 Cart / order summary panel
+### 6.3 Cart / order summary panel
 
-1. **Header** (primary at 10% alpha when editing an open tab, else divider at 10%):
-   `TAB / GUEST NAME` field (`InputBorder.none`, dense, 14 w900) + `OPEN TAB` badge when editing.
-2. `ITEMS ON TAB (n)` row with a red `CLEAR` text button → `CLEAR TICKET?` confirmation.
+1. **Header** (primary at 10% alpha when editing an existing order, else divider at 10%):
+   `GUEST / ORDER NAME` field (`InputBorder.none`, dense, 14 w900) + `EDITING` badge when editing.
+2. `ITEMS (n)` row with a red `CLEAR` text button → `CLEAR TICKET?` confirmation.
 3. Cart lines (`ListView.separated`): `2×` quantity, item name, modifier string
    (`A • B`, size 11, `#666666`), line total, and a close icon to remove. Tapping a line
    reopens the modifier dialog in edit mode.
-4. **Action row** — three `Expanded` buttons, disabled and greyed when the cart is empty:
+4. **Action button** — one full-width button, disabled and greyed when the cart is empty:
 
 | Button | Icon | Background |
 |---|---|---|
-| `QUICK SEND` | `bolt_rounded` | `#10B981` |
-| `OPEN TAB` / `UPDATE TAB` | `bookmark_add_rounded` | `#2AA31F` |
-| `PAY & CLOSE` | `point_of_sale_rounded` | `#16A34A` |
+| `SEND TO KITCHEN` | `bolt_rounded` | `#10B981` |
+| `UPDATE ORDER` (when editing) | `sync_rounded` | `#10B981` |
 
 Total = `Σ (menu price + Σ modifier deltas) × qty`. Modifier deltas are parsed from strings
 like `Add Bacon +$2.00` via `RegExp(r'\+\s*\$?([0-9]+(\.[0-9]+)?)')`.
 
-**Send feedback** — snackbars: `Tab "X" Closed & Paid!` (`#16A34A`), `Tab "X" Updated!`
-or `Sent to Kitchen for Tab "X"!` (`#111111`). Heavy haptic + optional confetti on send.
+**Send feedback** — snackbars: `Sent to Kitchen: <name>!` or `Order "<name>" Updated!`
+(`#111111`). Heavy haptic + optional confetti on send.
 
-### 6.5 Modifier dialog
+An unnamed order is stored as `Guest`. Sending always leaves the order `pending`; only the
+kitchen closes one out (`TicketFinished`), or a recall from History reopens it.
+
+### 6.4 Modifier dialog
 
 `StatefulBuilder` + `watchGlobalModifiers`. Modifier set = required + item modifiers +
 global modifiers. Order is kept as the union of the first two plus any extras.
@@ -257,47 +249,36 @@ global modifiers. Order is kept as the union of the first two plus any extras.
 - **MODIFIERS** `Wrap` of `FilterChip`s (no checkmark, selected = `#111111` with white text).
   Unselected required modifiers carry a 1.5px red border and `red.shade700` label. A red
   `SELECTION REQUIRED` pill appears when the item has required modifiers.
-- Actions: `CANCEL`, and `ADD TO TAB` (or `SAVE CHANGES` when editing) — enabled only when
+- Actions: `CANCEL`, and `ADD ITEM` (or `SAVE CHANGES` when editing) — enabled only when
   requirements are met, otherwise disabled and greyed.
-
-### 6.6 Payment dialog
-
-Width 400, title `PAYMENT & CLOSE TAB`.
-- `TOTAL DUE` banner.
-- `CASH RECEIVED` field, `$ ` prefix, centered, 24 w900.
-- Feedback banner: `CHANGE DUE:` in `#22C55E` when sufficient, `REMAINING:` in orange when short.
-- Quick cash chips `$5 $10 $20 $50 $100` and an `EXACT CHANGE` button.
-- Actions: `CANCEL`, `SETTLE & CLOSE TAB` (`#16A34A`).
 
 ---
 
 ## 7. History — `lib/ui/host/views/sent_queue_view.dart`
 
 App bar title `HISTORY`. `TabBar` with 3px indicator, labels
-`OPEN TABS (n)` / `CLOSED TABS (n)` / `ALL (n)`.
+`ACTIVE (n)` / `CLOSED (n)` / `ALL (n)`.
 
 Order card (radius 10, 1px border, padding 16):
-- **Header:** person icon, `TAB: <NAME>`, `#ABCD` (first 4 of uuid), status badge, timestamp
-  (respects 24h setting), then the action pill and — when open — the close pill.
-- **Action pill:** open → `ADD TO TAB`; closed → `EDIT`. Both load the order into the intake
+- **Header:** person icon, `<NAME>`, `#ABCD` (first 4 of uuid), status badge, timestamp
+  (respects 24h setting), then the action pill.
+- **Action pill:** active → `ADD ITEMS`; closed → `EDIT`. Both load the order into the intake
   and jump to the ORDER tab (`hostTabIndexProvider = 0`).
-- **Close pill:** `#16A34A` at 15% alpha, `CLOSE TAB` → `CLOSE TAB "X"?` confirmation →
-  `CLOSE & SETTLE`, success snackbar `Tab "X" Closed & Settled!` (`#16A34A`).
 - **Items:** green `check_circle` per line, name, and modifiers on a `#FACC15` at 10% alpha
   background; price right-aligned.
-- **Total row:** `TAB TOTAL` with the amount in primary, 16 w900.
+- **Total row:** `TOTAL` with the amount in primary, 16 w900.
 
 Status badge = pill at 12% alpha with a 0.3 alpha border, 10 w900, letterSpacing 0.5:
 
 | OrderStatus | Label | Color |
 |---|---|---|
-| `pending` | `OPEN TAB` | `#F59E0B` |
+| `pending` | `ACTIVE` | `#F59E0B` |
 | `partial` | `IN PROGRESS` | `#2AA31F` |
 | `ready` | `SERVED` | `#22C55E` |
 | `complete` | `CLOSED` | `#6B7280` |
 
-Empty states (faded receipt icon + title + subtitle): `No Open Tabs` / `No Closed Tabs` /
-`No Tabs Found`.
+Empty states (faded receipt icon + title + subtitle): `No Active Orders` /
+`No Closed Orders` / `No Orders`.
 
 Recall matches items back to menu entries **by name**; unmatched items are synthesized as
 placeholders, and recalled quantity always resets to 1.
@@ -647,27 +628,22 @@ Every widget, build helper, and dialog in the UI layer, with its location.
 | `OrderIntakeView` | 24 | Intake screen |
 | `_calcColumns` | 54 | Menu grid column count (3/4/5/6/7 by width) |
 | `build` | 63 | Row: menu section (flex 3) + 360px cart, or bottom cart on phones; confetti overlay |
-| `_buildMenuSection` | 122 | Open tabs bar + search/filter bar + menu grid |
-| `_buildOpenTabsBar` | 423 | `OPEN TABS (n)`, `NEW TAB`, and the tab chip strip with live totals |
-| `_promptNewTabName` | 608 | `START NEW TAB` dialog with table/takeout quick chips |
-| `_selectOpenTab` | 695 | Loads an open tab into the intake |
-| `_buildOrderSummarySection` | 738 | Cart panel: guest field, line items, `QUICK SEND` / `OPEN TAB` / `PAY & CLOSE` |
-| `_showPaymentDialog` | 1072 | `PAYMENT & CLOSE TAB` — cash, change due, quick cash |
-| `_buildFilterChipRow` | 1256 | One horizontal chip row (category or tag) |
-| `_handleItemTap` | 1314 | Adds directly, or opens the modifier dialog |
-| `_showModifierDialog` | 1335 | Quantity stepper, required-modifier enforcement, `ADD TO TAB` / `SAVE CHANGES` |
-| `_sendToKitchen` | 1601 | Submits the order, clears the intake, confetti + snackbar |
+| `_buildMenuSection` | 122 | Search/filter bar + menu grid |
+| `_buildOrderSummarySection` | 422 | Cart panel: guest field, line items, `SEND TO KITCHEN` / `UPDATE ORDER` |
+| `_buildFilterChipRow` | 696 | One horizontal chip row (category or tag) |
+| `_handleItemTap` | 754 | Adds directly, or opens the modifier dialog |
+| `_showModifierDialog` | 773 | Quantity stepper, required-modifier enforcement, `ADD ITEM` / `SAVE CHANGES` |
+| `_sendToKitchen` | 1039 | Submits the order, clears the intake, confetti + snackbar |
 
 ### 15.7 `lib/ui/host/views/sent_queue_view.dart`
 
 | Symbol | Line | Role |
 |---|---|---|
-| `SentQueueView` | 12 | History screen (open / closed / all tabs) |
+| `SentQueueView` | 12 | History screen (active / closed / all orders) |
 | `build` | 16 | `TabBar` with live counts + `TabBarView` |
-| `_buildOrderList` | 108 | Order cards with items, totals, `ADD TO TAB` / `EDIT` / `CLOSE TAB` |
-| `_buildStatusBadge` | 406 | Maps `OrderStatus` → label + color pill |
-| `_editOrder` | 446 | Recalls an order into the intake and switches to the ORDER tab |
-| `_closeTabDirectly` | 490 | Settle-and-close confirmation |
+| `_buildOrderList` | 108 | Order cards with items, totals, `ADD ITEMS` / `EDIT` |
+| `_buildStatusBadge` | 364 | Maps `OrderStatus` → label + color pill |
+| `_editOrder` | 404 | Recalls an order into the intake and switches to the ORDER tab |
 
 ### 15.8 `lib/ui/host/views/inventory_view.dart`
 

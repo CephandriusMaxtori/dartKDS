@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:confetti/confetti.dart';
 import '../../../models/database.dart';
-import '../../../models/order_status.dart';
 import '../../../data/host_store.dart';
 import '../../../providers/intake_provider.dart';
 import '../../../providers/host_store_provider.dart';
@@ -126,7 +125,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
     return Column(
       children: [
-        _buildOpenTabsBar(context),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           decoration: BoxDecoration(
@@ -420,321 +418,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     );
   }
 
-  Widget _buildOpenTabsBar(BuildContext context) {
-    final store = ref.watch(hostStoreProvider);
-    final intakeState = ref.watch(intakeProvider);
-    final theme = Theme.of(context);
-
-    return StreamBuilder<List<KDSOrderData>>(
-      stream: store.watchOrders(),
-      builder: (context, snapshot) {
-        final allOrders = snapshot.data ?? [];
-        final openOrders = allOrders
-            .where((o) => o.isTab && o.status != OrderStatus.complete)
-            .toList();
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            border: Border(bottom: BorderSide(color: theme.dividerColor)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.receipt_long_rounded,
-                        size: 16,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'OPEN TABS (${openOrders.length})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  InkWell(
-                    onTap: () => _promptNewTabName(context, ref),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: 0.15,
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.4,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.add,
-                            size: 14,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'NEW TAB',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 38,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        selected:
-                            intakeState.editingOrderUuid == null &&
-                            intakeState.customerName.isEmpty &&
-                            intakeState.items.isEmpty,
-                        selectedColor: theme.colorScheme.primary.withValues(
-                          alpha: 0.2,
-                        ),
-                        label: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add_circle_outline, size: 14),
-                            SizedBox(width: 4),
-                            Text(
-                              'QUICK ORDER',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                        onSelected: (_) {
-                          ref.read(intakeProvider.notifier).clear();
-                        },
-                      ),
-                    ),
-                    ...openOrders.map((order) {
-                      final isSelected =
-                          intakeState.editingOrderUuid == order.uuid;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: StreamBuilder<List<KDSItemData>>(
-                          stream: store.watchOrderItems(order.uuid),
-                          builder: (context, itemSnap) {
-                            final items = itemSnap.data ?? [];
-                            final orderTotal = items.fold<double>(
-                              0,
-                              (s, i) => s + i.price,
-                            );
-
-                            return ChoiceChip(
-                              selected: isSelected,
-                              selectedColor: theme.colorScheme.primary
-                                  .withValues(alpha: 0.2),
-                              side: isSelected
-                                  ? BorderSide(
-                                      color: theme.colorScheme.primary,
-                                      width: 2,
-                                    )
-                                  : null,
-                              label: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.person_outline_rounded,
-                                    size: 13,
-                                    color: isSelected
-                                        ? theme.colorScheme.primary
-                                        : theme.hintColor,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${order.customerName.toUpperCase()} · \$${orderTotal.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontWeight: isSelected
-                                          ? FontWeight.w900
-                                          : FontWeight.w700,
-                                      fontSize: 11,
-                                      color: isSelected
-                                          ? theme.colorScheme.primary
-                                          : theme.textTheme.bodyLarge?.color,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              onSelected: (_) =>
-                                  _selectOpenTab(context, ref, store, order),
-                            );
-                          },
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _promptNewTabName(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final theme = Theme.of(context);
-
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        title: Row(
-          children: [
-            Icon(Icons.bookmark_add_outlined, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            const Text(
-              'START NEW TAB',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                labelText: 'TAB / GUEST / TABLE NAME',
-                hintText: 'e.g. Table 4, Alex, Take Out',
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children:
-                  [
-                    'TABLE 1',
-                    'TABLE 2',
-                    'TABLE 3',
-                    'TAKE OUT',
-                    'COUNTER',
-                    'DRIVE THRU',
-                  ].map((label) {
-                    return ActionChip(
-                      label: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      onPressed: () {
-                        controller.text = label;
-                      },
-                    );
-                  }).toList(),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
-            ),
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('OPEN TAB'),
-          ),
-        ],
-      ),
-    );
-
-    if (name != null && name.isNotEmpty) {
-      ref.read(intakeProvider.notifier).clear();
-      ref.read(intakeProvider.notifier).setCustomerName(name);
-    }
-  }
-
-  Future<void> _selectOpenTab(
-    BuildContext context,
-    WidgetRef ref,
-    HostStore store,
-    KDSOrderData order,
-  ) async {
-    final items = await store.getOrderItems(order.uuid);
-    final allMenuItems = await store.getMenuItems();
-
-    final List<IntakeItem> intakeItems = [];
-    for (final item in items) {
-      final menuItem = allMenuItems.firstWhere(
-        (m) => m.name == item.name,
-        orElse: () => MenuItemData(
-          id: -1,
-          guid: '',
-          name: item.name,
-          category: 'General',
-          defaultStation: item.stationTag,
-          modifiers: [],
-          price: item.price,
-          requiredModifiers: [],
-          tags: [],
-          stockQuantity: 0,
-          trackStock: false,
-          oneTouch: false,
-          updatedAtMs: 0,
-        ),
-      );
-      intakeItems.add(
-        IntakeItem(
-          menuItem: menuItem,
-          selectedModifiers: item.modifiers,
-          quantity: 1,
-        ),
-      );
-    }
-
-    ref
-        .read(intakeProvider.notifier)
-        .loadOrder(order.uuid, order.customerName, intakeItems);
-  }
-
   Widget _buildOrderSummarySection(
     BuildContext context, {
     required bool isSidePanel,
@@ -743,16 +426,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final theme = Theme.of(context);
     final screenHeight = MediaQuery.of(context).size.height;
 
-    double totalPrice = 0;
-    for (var item in intakeState.items) {
-      double unitPrice = item.menuItem.price;
-      for (final mod in item.selectedModifiers) {
-        unitPrice += parseModifierPrice(mod);
-      }
-      totalPrice += unitPrice * item.quantity;
-    }
-
-    final isEditingTab = intakeState.editingOrderUuid != null;
+    final isEditingOrder = intakeState.editingOrderUuid != null;
 
     final panelContent = Material(
       color: theme.cardColor,
@@ -761,7 +435,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: isEditingTab
+              color: isEditingOrder
                   ? theme.colorScheme.primary.withValues(alpha: 0.1)
                   : theme.dividerColor.withValues(alpha: 0.1),
               border: Border(bottom: BorderSide(color: theme.dividerColor)),
@@ -771,7 +445,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 Icon(
                   Icons.receipt_long_rounded,
                   size: 16,
-                  color: isEditingTab
+                  color: isEditingOrder
                       ? theme.colorScheme.primary
                       : theme.hintColor,
                 ),
@@ -791,7 +465,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       letterSpacing: 0.5,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'TAB / GUEST NAME',
+                      hintText: 'GUEST / ORDER NAME',
                       hintStyle: TextStyle(
                         color: theme.hintColor,
                         fontWeight: FontWeight.normal,
@@ -802,7 +476,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                     ),
                   ),
                 ),
-                if (isEditingTab)
+                if (isEditingOrder)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -813,7 +487,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      'OPEN TAB',
+                      'EDITING',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 10,
@@ -830,7 +504,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'ITEMS ON TAB (${intakeState.items.length})',
+                  'ITEMS (${intakeState.items.length})',
                   style: theme.textTheme.labelLarge,
                 ),
                 TextButton(
@@ -957,89 +631,37 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: intakeState.items.isEmpty
-                              ? theme.dividerColor
-                              : const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: const Icon(Icons.bolt_rounded, size: 16),
-                        label: const Text(
-                          'QUICK SEND',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        onPressed: intakeState.items.isEmpty
-                            ? null
-                            : () => _sendToKitchen(context, ref, closeTab: false, isTab: false),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: intakeState.items.isEmpty
+                          ? theme.dividerColor
+                          : const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: intakeState.items.isEmpty
-                              ? theme.dividerColor
-                              : const Color(0xFF2AA31F),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: const Icon(Icons.bookmark_add_rounded, size: 16),
-                        label: Text(
-                          isEditingTab ? 'UPDATE TAB' : 'OPEN TAB',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        onPressed: intakeState.items.isEmpty
-                            ? null
-                            : () => _sendToKitchen(context, ref, closeTab: false, isTab: true),
+                    icon: Icon(
+                      isEditingOrder
+                          ? Icons.sync_rounded
+                          : Icons.bolt_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      isEditingOrder ? 'UPDATE ORDER' : 'SEND TO KITCHEN',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: intakeState.items.isEmpty
-                              ? theme.dividerColor
-                              : const Color(0xFF16A34A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: const Icon(Icons.point_of_sale_rounded, size: 16),
-                        label: const Text(
-                          'PAY & CLOSE',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        onPressed: intakeState.items.isEmpty
-                            ? null
-                            : () => _showPaymentDialog(context, ref, totalPrice),
-                      ),
-                    ),
-                  ],
+                    onPressed: intakeState.items.isEmpty
+                        ? null
+                        : () => _sendToKitchen(context, ref),
+                  ),
                 ),
               ],
             ),
@@ -1067,190 +689,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         child: panelContent,
       );
     }
-  }
-
-  void _showPaymentDialog(BuildContext context, WidgetRef ref, double total) {
-    final controller = TextEditingController();
-    double received = 0;
-    final theme = Theme.of(context);
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final change = (received - total).clamp(0.0, 999999.0);
-          final isShort = received > 0 && received < total;
-
-          return AlertDialog(
-            backgroundColor: theme.cardColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: theme.dividerColor),
-            ),
-            title: const Text(
-              'PAYMENT & CLOSE TAB',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-            ),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.dividerColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'TOTAL DUE',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        Text(
-                          '\$${total.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: controller,
-                    autofocus: false,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    textAlign: TextAlign.center,
-                    decoration: InputDecoration(
-                      labelText: 'CASH RECEIVED',
-                      labelStyle: const TextStyle(fontSize: 12),
-                      prefixText: '\$ ',
-                      filled: true,
-                      fillColor: theme.scaffoldBackgroundColor,
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: theme.dividerColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    onChanged: (val) {
-                      setState(() {
-                        received = double.tryParse(val) ?? 0;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  if (received > 0)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isShort
-                            ? Colors.orange.withValues(alpha: 0.1)
-                            : const Color(0xFF22C55E).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isShort
-                              ? Colors.orange
-                              : const Color(0xFF22C55E),
-                          width: 2,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            isShort ? 'REMAINING:' : 'CHANGE DUE:',
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          Text(
-                            '\$${(isShort ? total - received : change).toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              color: isShort
-                                  ? Colors.orange
-                                  : const Color(0xFF22C55E),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: [5, 10, 20, 50, 100].map((amt) {
-                      return ActionChip(
-                        label: Text('\$$amt'),
-                        labelStyle: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                        ),
-                        onPressed: () {
-                          controller.text = amt.toString();
-                          setState(() => received = amt.toDouble());
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton(
-                    onPressed: () {
-                      controller.text = total.toStringAsFixed(2);
-                      setState(() => received = total);
-                    },
-                    child: const Text(
-                      'EXACT CHANGE',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'CANCEL',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _sendToKitchen(context, ref, closeTab: true);
-                },
-                child: const Text('SETTLE & CLOSE TAB'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildFilterChipRow({
@@ -1320,7 +758,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Added to Tab: ${item.name}',
+            'Added: ${item.name}',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           duration: const Duration(milliseconds: 800),
@@ -1587,7 +1025,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                             }
                           : null,
                       child: Text(
-                        editIndex != null ? 'SAVE CHANGES' : 'ADD TO TAB',
+                        editIndex != null ? 'SAVE CHANGES' : 'ADD ITEM',
                       ),
                     ),
                   ],
@@ -1598,26 +1036,21 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     );
   }
 
-  Future<void> _sendToKitchen(
-    BuildContext context,
-    WidgetRef ref, {
-    bool closeTab = false,
-    bool isTab = true,
-  }) async {
+  Future<void> _sendToKitchen(BuildContext context, WidgetRef ref) async {
     HapticFeedback.heavyImpact();
     final state = ref.read(intakeProvider);
 
     final isEditing = state.editingOrderUuid != null;
     final orderUuid = state.editingOrderUuid ?? const Uuid().v4();
-    final tabName = state.customerName.isEmpty
-        ? (isTab ? 'Guest' : 'Quick Order')
+    final orderName = state.customerName.isEmpty
+        ? 'Guest'
         : state.customerName;
 
-    // Stock decrements, tab edits, settling and the kitchen broadcast all live
-    // behind the store, so this is identical on a native host and in a browser.
+    // Stock decrements, order edits and the kitchen broadcast all live behind
+    // the store, so this is identical on a native host and in a browser.
     await ref.read(hostStoreProvider).submitOrder(
       orderUuid: orderUuid,
-      customerName: tabName,
+      customerName: orderName,
       lines: state.items
           .map(
             (i) {
@@ -1637,7 +1070,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
           )
           .toList(),
       isEditing: isEditing,
-      closeTab: closeTab,
     );
     ref.read(intakeProvider.notifier).clear();
     if (!context.mounted) return;
@@ -1648,16 +1080,12 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          closeTab
-              ? 'Tab "$tabName" Closed & Paid!'
-              : (isEditing
-                    ? 'Tab "$tabName" Updated!'
-                    : 'Sent to Kitchen for Tab "$tabName"!'),
+          isEditing
+              ? 'Order "$orderName" Updated!'
+              : 'Sent to Kitchen: $orderName!',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: closeTab
-            ? const Color(0xFF16A34A)
-            : const Color(0xFF111111),
+        backgroundColor: const Color(0xFF111111),
       ),
     );
   }

@@ -147,17 +147,14 @@ abstract class HostStore {
   Future<void> clearLibrary();
 
   // ── Order writes ──────────────────────────────────────────────
-  /// Creates a new tab, appends to an existing tab ([isEditing]) or settles it
-  /// ([closeTab]). Handles stock decrements/restorations and notifies the
-  /// kitchen displays.
+  /// Creates an order, or rewrites an existing one when [isEditing]. Handles
+  /// stock decrements/restorations and notifies the kitchen displays.
   Future<void> submitOrder({
     required String orderUuid,
     required String customerName,
     required List<OrderLine> lines,
     required bool isEditing,
-    required bool closeTab,
   });
-  Future<void> closeTab(String orderUuid);
   Future<void> deleteOrder(String orderUuid);
   Future<void> recallOrder(String orderUuid);
   Future<void> clearSalesAndHistory();
@@ -233,7 +230,6 @@ KDSOrderData orderFromMap(Map<dynamic, dynamic> m) => KDSOrderData(
       DateTime.fromMillisecondsSinceEpoch(0),
   status: _enumAt(OrderStatus.values, (m['status'] as num?)?.toInt() ?? 0),
   updatedAtMs: (m['updatedAtMs'] as num?)?.toInt() ?? 0,
-  isTab: m['isTab'] != false,
 );
 
 ItemSalesStat salesStatFromMap(Map<dynamic, dynamic> m) {

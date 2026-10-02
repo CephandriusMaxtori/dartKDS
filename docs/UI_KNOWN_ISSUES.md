@@ -29,8 +29,8 @@ it from the client UI. (`settings.themeMode` is shared with the host picker, whi
 
 ### 4. `TabBar` indicator color differs between the two tabbed screens
 
-- `lib/ui/host/views/library_view.dart:52` uses `indicatorColor: onSurface`
-- `lib/ui/host/views/sent_queue_view.dart:16` uses `indicatorColor: theme.colorScheme.primary`
+- `lib/ui/host/views/library_view.dart:95` uses `indicatorColor: onSurface`
+- `lib/ui/host/views/sent_queue_view.dart:48` uses `indicatorColor: theme.colorScheme.primary`
 
 Neither reads as intentional; the primary-colored indicator is the one that matches the rest
 of the brand.
@@ -53,7 +53,7 @@ Any change to the subnet preference has to be made in two places.
 
 `lib/ui/host/views/library_view.dart:571` (stations), `:689` (global modifiers) and the item
 overflow menu delete immediately. Compare with the rest of the app, which confirms
-`CLEAR TICKET?`, `CLOSE TAB?`, `IMPORT LIBRARY`, and `CLEAR ALL LIBRARY DATA?`.
+`CLEAR TICKET?`, `IMPORT LIBRARY`, and `CLEAR ALL LIBRARY DATA?`.
 
 ## Dead code
 

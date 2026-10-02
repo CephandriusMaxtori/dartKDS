@@ -11,7 +11,7 @@ import 'host_store.dart';
 /// database state and identical kitchen broadcasts, so the logic lives here
 /// rather than being duplicated.
 
-/// Creates a tab, appends to an existing one, or settles it. Returns the
+/// Creates an order, or rewrites an existing one when [isEditing]. Returns the
 /// `order` payload to broadcast to the kitchen displays.
 Future<Map<String, dynamic>> submitOrderToDatabase({
   required KDSDatabase db,
@@ -19,7 +19,6 @@ Future<Map<String, dynamic>> submitOrderToDatabase({
   required String customerName,
   required List<OrderLine> lines,
   required bool isEditing,
-  required bool closeTab,
 }) {
   // Stock restore, order rewrite and item inserts have to land together. Without
   // a transaction a failure part-way through left stock decremented against an
@@ -31,7 +30,6 @@ Future<Map<String, dynamic>> submitOrderToDatabase({
       customerName: customerName,
       lines: lines,
       isEditing: isEditing,
-      closeTab: closeTab,
     ),
   );
 }
@@ -42,14 +40,12 @@ Future<Map<String, dynamic>> _submitOrderInTransaction({
   required String customerName,
   required List<OrderLine> lines,
   required bool isEditing,
-  required bool closeTab,
 }) async {
   final now = DateTime.now();
   final nowMs = now.millisecondsSinceEpoch;
-  final finalStatus = closeTab ? OrderStatus.complete : OrderStatus.pending;
 
   if (isEditing) {
-    // Give back the stock the previous version of this tab consumed.
+    // Give back the stock the previous version of this order consumed.
     final oldItems = await (db.select(
       db.kDSItems,
     )..where((t) => t.orderUuid.equals(orderUuid))).get();
@@ -77,7 +73,7 @@ Future<Map<String, dynamic>> _submitOrderInTransaction({
       KDSOrdersCompanion(
         customerName: drift.Value(customerName),
         timestamp: drift.Value(now),
-        status: drift.Value(finalStatus),
+        status: const drift.Value(OrderStatus.pending),
         updatedAtMs: drift.Value(nowMs),
       ),
     );
@@ -87,8 +83,7 @@ Future<Map<String, dynamic>> _submitOrderInTransaction({
         uuid: orderUuid,
         customerName: customerName,
         timestamp: now,
-        status: finalStatus,
-        isTab: true,
+        status: OrderStatus.pending,
         updatedAtMs: nowMs,
       ),
     );
@@ -144,38 +139,12 @@ Future<Map<String, dynamic>> _submitOrderInTransaction({
     'uuid': orderUuid,
     'customerName': customerName,
     'timestamp': now.toIso8601String(),
-    'status': finalStatus.index,
+    'status': OrderStatus.pending.index,
     'items': items,
   };
 }
 
-/// Settles a tab: items are bumped and the order is marked complete. Shared by
-/// the native store and the `CloseTab`/`TicketFinished` web command so a tab
-/// closed from either surface ends up in the same state on every display.
-Future<void> closeTabInDatabase({
-  required KDSDatabase db,
-  required String orderUuid,
-}) async {
-  final now = DateTime.now().millisecondsSinceEpoch;
-  await (db.update(
-    db.kDSItems,
-  )..where((t) => t.orderUuid.equals(orderUuid))).write(
-    KDSItemsCompanion(
-      status: const drift.Value(ItemStatus.bumped),
-      updatedAtMs: drift.Value(now),
-    ),
-  );
-  await (db.update(
-    db.kDSOrders,
-  )..where((t) => t.uuid.equals(orderUuid))).write(
-    KDSOrdersCompanion(
-      status: const drift.Value(OrderStatus.complete),
-      updatedAtMs: drift.Value(now),
-    ),
-  );
-}
-
-/// Re-opens a settled tab and returns it as a fresh order payload for the
+/// Re-opens a completed order and returns it as a fresh order payload for the
 /// kitchen displays.
 Future<Map<String, dynamic>?> recallOrderInDatabase({
   required KDSDatabase db,

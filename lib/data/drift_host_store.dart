@@ -304,7 +304,6 @@ class DriftHostStore implements HostStore {
     required String customerName,
     required List<OrderLine> lines,
     required bool isEditing,
-    required bool closeTab,
   }) async {
     final order = await submitOrderToDatabase(
       db: db,
@@ -312,24 +311,13 @@ class DriftHostStore implements HostStore {
       customerName: customerName,
       lines: lines,
       isEditing: isEditing,
-      closeTab: closeTab,
     );
     server.broadcast(
       jsonEncode({
-        'type': closeTab
-            ? 'TicketFinished'
-            : (isEditing ? 'OrderUpdated' : 'OrderCreated'),
+        'type': isEditing ? 'OrderUpdated' : 'OrderCreated',
         'orderUuid': orderUuid,
         'order': order,
       }),
-    );
-  }
-
-  @override
-  Future<void> closeTab(String orderUuid) async {
-    await closeTabInDatabase(db: db, orderUuid: orderUuid);
-    server.broadcast(
-      jsonEncode({'type': 'TicketFinished', 'orderUuid': orderUuid}),
     );
   }
 
