@@ -41,9 +41,18 @@ class SyncService {
   final KDSDatabase db;
   SyncService(this.db);
 
+  static const Duration _requestTimeout = Duration(seconds: 5);
+
+  /// A peer that has not announced itself in this long is dropped. Peers are
+  /// only ever *added* by discovery, so without expiry the map grows for the
+  /// life of the process and every round keeps paying the 5s timeout for hosts
+  /// that were switched off days ago.
+  Duration peerExpiry = const Duration(minutes: 10);
+
   Timer? _pollTimer;
   bool _isRunning = false;
   String? _selfHostId;
+  final Map<String, DateTime> _peerLastSeen = {};
   StreamSubscription? _discoverySub;
   final Map<String, SyncPeer> _peers = {};
   String? _lastError;
@@ -73,6 +82,7 @@ class SyncService {
         return;
       }
       final peer = _peers[host.hostId!];
+      final changed = peer == null;
       if (peer == null) {
         _peers[host.hostId!] = SyncPeer(
           hostId: host.hostId!,
@@ -80,18 +90,40 @@ class SyncService {
           port: host.port,
           role: host.role ?? 'primary',
         );
-        _emitStatus();
-      } else if (peer.address != host.address || peer.port != host.port) {
+      } else if (peer.address != host.address ||
+          peer.port != host.port ||
+          (host.role != null && host.role != peer.role)) {
+        // A host that came back on a different address, or was demoted between
+        // primary and backup, was previously only refreshed on address change.
         peer
           ..address = host.address
           ..port = host.port
           ..role = host.role ?? peer.role;
-        _emitStatus();
       }
+      _peerLastSeen[host.hostId!] = DateTime.now();
+      if (changed) _emitStatus();
     }, onError: (_) {});
 
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(interval, (_) => _syncOnce());
+    _pollTimer = Timer.periodic(interval, (_) {
+      _expireStalePeers();
+      _syncOnce();
+    });
+    _emitStatus();
+  }
+
+  void _expireStalePeers() {
+    if (_peerLastSeen.isEmpty) return;
+    final cutoff = DateTime.now().subtract(peerExpiry);
+    final expired = _peerLastSeen.entries
+        .where((e) => e.value.isBefore(cutoff))
+        .map((e) => e.key)
+        .toList();
+    if (expired.isEmpty) return;
+    for (final id in expired) {
+      _peers.remove(id);
+      _peerLastSeen.remove(id);
+    }
     _emitStatus();
   }
 
@@ -102,6 +134,7 @@ class SyncService {
     _discoverySub?.cancel();
     _discoverySub = null;
     _peers.clear();
+    _peerLastSeen.clear();
     _selfHostId = null;
     _emitStatus();
   }
@@ -112,46 +145,85 @@ class SyncService {
     }
   }
 
+  /// Guards against overlapping rounds. A slow or timing-out peer can outlast the
+  /// poll interval, and two rounds interleaving would apply each other's
+  /// half-finished change sets and race on `peer.lastSyncMs`.
+  bool _syncInFlight = false;
+
   Future<void> _syncOnce() async {
-    final engine = SyncEngine(db);
-    for (final peer in _peers.values.toList()) {
-      try {
-        // Pull changes from peer
-        final pullClient = HttpClient();
-        final pullUrl =
-            'http://${peer.address}:${peer.port}/api/sync/changes?since=${peer.lastSyncMs}';
-        final pullReq = await pullClient
-            .getUrl(Uri.parse(pullUrl))
-            .timeout(const Duration(seconds: 5));
-        final pullResp = await pullReq.close().timeout(const Duration(seconds: 5));
-        final pullBody = await pullResp.transform(utf8.decoder).join();
-        pullClient.close(force: true);
-
-        if (pullResp.statusCode == 200 && pullBody.isNotEmpty) {
-          await engine.applyChanges(pullBody);
-        }
-
-        // Push local changes to peer
-        final pushClient = HttpClient();
-        final pushUrl = 'http://${peer.address}:${peer.port}/api/sync/apply';
-        final localChanges = await engine.getChanges(peer.lastSyncMs);
-        final pushReq = await pushClient
-            .postUrl(Uri.parse(pushUrl))
-            .timeout(const Duration(seconds: 5));
-        pushReq.headers.contentType = ContentType.json;
-        pushReq.write(localChanges);
-        final pushResp = await pushReq.close().timeout(const Duration(seconds: 5));
-        await pushResp.drain<void>();
-        pushClient.close(force: true);
-
-        peer.lastSyncMs = DateTime.now().millisecondsSinceEpoch;
-        peer.error = null;
-      } catch (e) {
-        peer.error = e.toString();
+    if (_syncInFlight) return;
+    _syncInFlight = true;
+    try {
+      final engine = SyncEngine(db);
+      for (final peer in _peers.values.toList()) {
+        await _syncWithPeer(peer, engine);
       }
+      _lastError = null;
+    } finally {
+      // Cleared even if a peer threw something unexpected, otherwise one bad
+      // host would stop sync permanently instead of retrying next tick.
+      _syncInFlight = false;
     }
     _lastSyncTime = DateTime.now();
     _emitStatus();
+  }
+
+  Future<void> _syncWithPeer(SyncPeer peer, SyncEngine engine) async {
+    // Two clients for one exchange. Both are closed in `finally` so a timeout
+    // or a reset connection cannot leak a socket every 10 seconds for the life
+    // of the process — on a device that meant the peer list slowly starving the
+    // host's own HTTP capacity.
+    final pullClient = HttpClient();
+    final pushClient = HttpClient();
+    try {
+      final pullUrl =
+          'http://${peer.address}:${peer.port}/api/sync/changes?since=${peer.lastSyncMs}';
+      final pullReq = await pullClient
+          .getUrl(Uri.parse(pullUrl))
+          .timeout(_requestTimeout);
+      final pullResp = await pullReq.close().timeout(_requestTimeout);
+      final pullBody = await pullResp.transform(utf8.decoder).join().timeout(
+        _requestTimeout,
+      );
+
+      if (pullResp.statusCode == 200 && pullBody.isNotEmpty) {
+        await engine.applyChanges(pullBody);
+      } else if (pullResp.statusCode != 200) {
+        throw HttpException(
+          'Pull failed with status ${pullResp.statusCode}',
+          uri: Uri.parse(pullUrl),
+        );
+      }
+
+      final pushUrl = 'http://${peer.address}:${peer.port}/api/sync/apply';
+      final localChanges = await engine.getChanges(peer.lastSyncMs);
+      final pushReq = await pushClient
+          .postUrl(Uri.parse(pushUrl))
+          .timeout(_requestTimeout);
+      pushReq.headers.contentType = ContentType.json;
+      pushReq.write(localChanges);
+      final pushResp = await pushReq.close().timeout(_requestTimeout);
+      // The body has to be drained or the connection cannot be reused or
+      // released cleanly.
+      await pushResp.drain<void>().timeout(_requestTimeout);
+      if (pushResp.statusCode != 200) {
+        throw HttpException(
+          'Push failed with status ${pushResp.statusCode}',
+          uri: Uri.parse(pushUrl),
+        );
+      }
+
+      // Only advanced on a fully successful exchange. Moving it on a partial
+      // one would skip the changes that were in flight at the time.
+      peer.lastSyncMs = DateTime.now().millisecondsSinceEpoch;
+      peer.error = null;
+    } catch (e) {
+      peer.error = e.toString();
+      _lastError = 'Sync with ${peer.hostId} failed: $e';
+    } finally {
+      pullClient.close(force: true);
+      pushClient.close(force: true);
+    }
   }
 
   void dispose() {

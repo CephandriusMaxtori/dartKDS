@@ -15,9 +15,29 @@ import '../../providers/service_providers.dart';
 import '../../providers/client_state_provider.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/settings_provider.dart';
-import '../../services/discovery_service.dart';
+import '../../services/client_service.dart';
 import '../../models/order_status.dart';
 import '../shared/responsive_utils.dart';
+
+/// Whether the board should be drawn dark.
+///
+/// `system` is resolved against the platform brightness. Reading the setting
+/// directly treated anything that was not literally `dark` as light, so a
+/// display left on the system default rendered a light board regardless of what
+/// the OS was actually doing — and there was no way to change it from the
+/// display's own settings screen.
+///
+/// Top-level so the ticket cards, which are a separate widget class, resolve the
+/// same way the screen around them does.
+bool isDarkBoard(BuildContext context, AppSettings settings) {
+  if (settings.clientHighContrast) return true;
+  return switch (settings.themeMode) {
+    ThemeMode.dark => true,
+    ThemeMode.light => false,
+    ThemeMode.system =>
+      MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+  };
+}
 
 class ClientHome extends ConsumerStatefulWidget {
   const ClientHome({super.key});
@@ -29,14 +49,18 @@ class ClientHome extends ConsumerStatefulWidget {
 class _ClientHomeState extends ConsumerState<ClientHome>
     with WidgetsBindingObserver {
   bool _isConnected = false;
-  StreamSubscription? _wsSubscription;
+  StreamSubscription<dynamic>? _wsSubscription;
+  StreamSubscription<ClientConnectionStatus>? _statusSubscription;
   StreamSubscription? _discoverySub;
   String _deviceIp = '...';
   final _audioPlayer = AudioPlayer();
   late ConfettiController _confettiController;
   bool _isRushMode = false;
-  DateTime _lastHeartbeat = DateTime.now();
-  Timer? _connectionWatchdog;
+  String? _clientId;
+
+  /// Distinguishes "never reached a host" from "lost one". First run gets the
+  /// full connection screen; a drop keeps the board visible under a banner.
+  bool _hasConnectedBefore = false;
   String? _lastConnectedHost;
   int? _lastConnectedPort;
   int _discoveryRetries = 0;
@@ -60,6 +84,64 @@ class _ClientHomeState extends ConsumerState<ClientHome>
       _loadLastHostAndStart();
       _fetchIp();
     });
+
+    _watchHostLink();
+  }
+
+  /// Subscribes to the host link once, for the lifetime of this screen.
+  ///
+  /// Reconnection lives in [ClientService], so the stream handed out there
+  /// survives a dropped socket. Previously every connect attempt re-subscribed
+  /// and the old subscription was only cancelled on the code paths that
+  /// remembered to, which left dead sockets delivering frames and ran the
+  /// handler several times per message.
+  void _watchHostLink() {
+    final service = ref.read(clientServiceProvider);
+    _wsSubscription = service.stream.listen(
+      (message) => _handleIncomingMessage(message.toString()),
+      // A read error is not fatal: the service tears the socket down and
+      // reconnects on its own.
+      onError: (Object error) => debugPrint('KDS frame stream error: $error'),
+    );
+    _statusSubscription = service.statusStream.listen((status) {
+      final connected = status == ClientConnectionStatus.connected;
+      if (!mounted || connected == _isConnected) return;
+      setState(() {
+        _isConnected = connected;
+        if (connected) _hasConnectedBefore = true;
+      });
+      if (connected) {
+        // Register on every fresh socket. The host replays the active orders to
+        // whoever registers, which is what brings a dropped display back in
+        // sync with the kitchen rather than leaving it showing a stale board.
+        _registerWithHost();
+      }
+    });
+  }
+
+  /// Identity is minted once and reused, so a reconnect is recognisably the
+  /// same display to the host rather than a second device.
+  Future<String> _resolveClientId() async {
+    final cached = _clientId;
+    if (cached != null) return cached;
+    final prefs = await SharedPreferences.getInstance();
+    var id = prefs.getString('client_uuid');
+    if (id == null || id.isEmpty) {
+      id = const Uuid().v4();
+      await prefs.setString('client_uuid', id);
+    }
+    return _clientId = id;
+  }
+
+  void _registerWithHost() {
+    final id = _clientId;
+    if (id == null) return;
+    ref.read(clientServiceProvider).send({
+      'type': 'RegisterClient',
+      'id': id,
+      'deviceName': Platform.localHostname,
+      'station': ref.read(stationTagProvider) ?? 'GENERAL',
+    });
   }
 
   Future<void> _loadLastHostAndStart() async {
@@ -74,9 +156,12 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     if (state == AppLifecycleState.paused) {
       // Save battery by stopping discovery in background
       _discoverySub?.cancel();
-      _connectionWatchdog?.cancel();
     } else if (state == AppLifecycleState.resumed) {
-      if (!_isConnected) _startDiscovery();
+      if (_isConnected) return;
+      // The network just came back, so there is no reason to sit out the
+      // remaining backoff before dialling again.
+      unawaited(ref.read(clientServiceProvider).reconnectNow());
+      _startDiscovery();
     }
   }
 
@@ -91,9 +176,25 @@ class _ClientHomeState extends ConsumerState<ClientHome>
   }
 
   void _handleIncomingMessage(String message) {
-    _lastHeartbeat = DateTime.now();
-    final data = jsonDecode(message);
-    if (data['type'] == 'ping') return;
+    final Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(message);
+      if (decoded is! Map) return;
+      data = decoded.cast<String, dynamic>();
+    } catch (e) {
+      // One unreadable frame is not worth taking the display down for, and this
+      // runs inside a stream listener where an uncaught throw surfaces as an
+      // unhandled zone error and takes the app with it.
+      debugPrint('KDS dropped an unreadable frame: $e');
+      return;
+    }
+    if (data['type'] == 'ping') {
+      // Answer the host's liveness probe. Its roster sweep only keeps clients
+      // that are heard from, so staying silent here gets this display evicted.
+      ref.read(clientServiceProvider).send({'type': 'pong'});
+      return;
+    }
+    if (data['type'] == 'pong') return;
 
     if (data['type'] == 'KitchenBroadcast') {
       _showBroadcastOverlay(
@@ -191,14 +292,15 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _wsSubscription?.cancel();
+    _statusSubscription?.cancel();
     _discoverySub?.cancel();
-    _connectionWatchdog?.cancel();
     _confettiController.dispose();
     _audioPlayer.dispose();
     super.dispose();
   }
 
   void _startDiscovery() async {
+    if (_isConnected) return;
     _discoverySub?.cancel();
     _discoveryRetries = 0;
 
@@ -206,16 +308,14 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     // by the host itself, so just connect back to the origin.
     if (kIsWeb) {
       final originHost = Uri.base.host;
-      if (originHost.isNotEmpty && !_isConnected) {
+      if (originHost.isNotEmpty) {
         _connectToHost(originHost, 8080);
         return;
       }
     }
 
     // Direct attempt if we have cached credentials
-    if (_lastConnectedHost != null &&
-        _lastConnectedPort != null &&
-        !_isConnected) {
+    if (_lastConnectedHost != null && _lastConnectedPort != null) {
       _connectToHost(_lastConnectedHost!, _lastConnectedPort!);
       return;
     }
@@ -224,6 +324,7 @@ class _ClientHomeState extends ConsumerState<ClientHome>
   }
 
   void _listenForHosts() {
+    if (_isConnected || !mounted) return;
     _discoverySub?.cancel();
     _discoverySub = ref.read(discoveryServiceProvider).discover().listen((
       host,
@@ -248,92 +349,39 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     });
   }
 
-  void _connectToHost(String host, int port, {bool manual = false}) async {
+  Future<void> _connectToHost(
+    String host,
+    int port, {
+    bool manual = false,
+  }) async {
     final hostTrim = host.trim();
     if (hostTrim.isEmpty) return;
     _discoverySub?.cancel();
 
-    final prefs = await SharedPreferences.getInstance();
-    String? clientId = prefs.getString('client_uuid');
-    if (clientId == null) {
-      clientId = Uuid().v4();
-      await prefs.setString('client_uuid', clientId);
-    }
+    await _resolveClientId();
 
     try {
       await ref.read(clientServiceProvider).connect(hostTrim, port);
     } catch (e) {
-      if (!manual) _startDiscovery();
+      debugPrint('KDS could not reach ${hostTrim}:$port — $e');
       if (mounted) setState(() => _isConnected = false);
+      // Fall back to discovery only when there is nothing to retry against.
+      // A known host is already being retried by the service with backoff, and
+      // bouncing back into discovery here re-entered this method immediately,
+      // spinning the reconnect loop with no delay until the app was backgrounded.
+      if (!manual && _lastConnectedHost == null) _startDiscovery();
       return;
     }
 
     // Save successful connection for future boot speed & battery optimization
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_host', hostTrim);
     await prefs.setInt('last_port', port);
-
-    final registration = jsonEncode({
-      'type': 'RegisterClient',
-      'id': clientId,
-      'deviceName': Platform.localHostname,
-      'station': ref.read(stationTagProvider) ?? 'GENERAL',
-    });
-
-    ref.read(clientServiceProvider).send(registration);
-
     _lastConnectedHost = hostTrim;
     _lastConnectedPort = port;
-    _lastHeartbeat = DateTime.now();
-
-    _connectionWatchdog?.cancel();
-    _connectionWatchdog = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!_isConnected) return;
-      final diff = DateTime.now().difference(_lastHeartbeat).inSeconds;
-      if (diff > 75) {
-        _connectToHost(_lastConnectedHost!, _lastConnectedPort!);
-      }
-    });
-
-    _wsSubscription?.cancel();
-    _wsSubscription = ref
-        .read(clientServiceProvider)
-        .stream
-        .listen(
-          (message) {
-            _handleIncomingMessage(message.toString());
-          },
-          onError: (e) {
-            _handleDisconnect();
-          },
-          onDone: () {
-            _handleDisconnect();
-          },
-        );
-    if (mounted) {
-      setState(() {
-        _isConnected = true;
-      });
-    }
-  }
-
-  void _handleDisconnect() {
-    if (mounted) {
-      setState(() {
-        _isConnected = false;
-      });
-    }
-    _wsSubscription?.cancel();
-    _connectionWatchdog?.cancel();
-
-    if (_lastConnectedHost != null && _lastConnectedPort != null) {
-      Future.delayed(const Duration(seconds: 3), () {
-        if (!_isConnected && mounted) {
-          _connectToHost(_lastConnectedHost!, _lastConnectedPort!);
-        }
-      });
-    } else {
-      _startDiscovery();
-    }
+    // Registration is sent by the status listener once the socket reports
+    // connected, so this screen does not have to track connection state to know
+    // when the host is listening.
   }
 
   @override
@@ -345,8 +393,13 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     final isTablet =
         Responsive.isTablet(context) || Responsive.isDesktop(context);
 
-    final isDark =
-        settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+    final isDark = isDarkBoard(context, settings);
+
+    // First run: no host has ever been reached, so offer the full set of ways
+    // in rather than an empty board.
+    if (!_isConnected && !_hasConnectedBefore) {
+      return _buildConnectionScreen(stationTag);
+    }
 
     return MediaQuery(
       data: MediaQuery.of(
@@ -355,14 +408,18 @@ class _ClientHomeState extends ConsumerState<ClientHome>
       child: Stack(
         children: [
           Scaffold(
+            // Follows the resolved brightness rather than the raw setting, so
+            // `system` no longer paints a light board on a display set to dark.
             backgroundColor: settings.clientHighContrast
                 ? Colors.black
-                : (settings.themeMode == ThemeMode.light
-                      ? Colors.white
-                      : const Color(0xFF030712)),
+                : (isDark
+                      ? const Color(0xFF030712)
+                      : Colors.white),
             body: Column(
               children: [
                 _buildHeader(stationTag, timeFormat, settings),
+                // Only after a drop, never on first run.
+                if (!_isConnected) _buildReconnectingBanner(),
                 Expanded(
                   child: tickets.isEmpty
                       ? _buildEmptyState(isDark)
@@ -452,72 +509,131 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     );
   }
 
+  /// Shown before this display has ever reached a host.
+  ///
+  /// This was unreachable before: `build` never referenced it, so QR scanning,
+  /// station selection and re-scan had no entry point. That mattered most
+  /// exactly when discovery fails — an AP that blocks broadcast traffic leaves a
+  /// display with no way to connect at all short of the header's dot, which is
+  /// not discoverable as a control.
   Widget _buildConnectionScreen(String stationTag) {
     return Scaffold(
       backgroundColor: const Color(0xFF030712),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: Color(0xFF22C55E)),
-            const SizedBox(height: 24),
-            const Text(
-              'SEARCHING FOR KITCHEN HOST...',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => _showStationSelectionDialog(),
-              child: Text('STATION: ${stationTag.toUpperCase()}'),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => _showScannerDialog(context),
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              label: const Text('SCAN QR CODE'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF22C55E),
-                foregroundColor: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () {
-                setState(() => _isConnected = false);
-                _startDiscovery();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F2937),
-              ),
-              child: const Text('RE-SCAN FOR HOST'),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => _showManualConnectDialog(),
-              child: const Text(
-                'MANUAL CONNECT',
-                style: TextStyle(color: Color(0xFF6B7280)),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () {
-                _discoverySub?.cancel();
-                ref.read(deviceRoleProvider.notifier).setRole(DeviceRole.unset);
-              },
-              child: const Text(
-                'CANCEL',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF22C55E)),
+              const SizedBox(height: 24),
+              const Text(
+                'SEARCHING FOR KITCHEN HOST...',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => _showStationSelectionDialog(),
+                child: Text('STATION: ${stationTag.toUpperCase()}'),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => _showScannerDialog(context),
+                icon: const Icon(Icons.qr_code_scanner_rounded),
+                label: const Text('SCAN QR CODE'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF22C55E),
+                  foregroundColor: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => _startDiscovery(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1F2937),
+                ),
+                child: const Text('RE-SCAN FOR HOST'),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => _showManualConnectDialog(),
+                child: const Text(
+                  'MANUAL CONNECT',
+                  style: TextStyle(color: Color(0xFF6B7280)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  _discoverySub?.cancel();
+                  ref
+                      .read(deviceRoleProvider.notifier)
+                      .setRole(DeviceRole.unset);
+                },
+                child: const Text(
+                  'CANCEL',
+                  style: TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Slim banner shown when the link drops after a display was already working.
+  ///
+  /// The board stays visible on purpose — a chef needs to see the tickets in
+  /// front of them — but it is now visibly marked as not backed by the host, so
+  /// bumps are not fired at a board the host no longer agrees with.
+  Widget _buildReconnectingBanner() {
+    return Material(
+      color: const Color(0xFFB45309),
+      child: InkWell(
+        onTap: () => unawaited(ref.read(clientServiceProvider).reconnectNow()),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'RECONNECTING TO HOST — TICKETS MAY BE OUT OF DATE',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Text(
+                'RETRY NOW',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -635,12 +751,11 @@ class _ClientHomeState extends ConsumerState<ClientHome>
   }
 
   Widget _buildHeader(String station, String timeFormat, AppSettings settings) {
-    final isDark =
-        settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+    final isDark = isDarkBoard(context, settings);
     final textColor = isDark ? Colors.white : Colors.black87;
 
     final bool highContrast = settings.clientHighContrast;
-    final bool light = settings.themeMode == ThemeMode.light;
+    final bool light = !isDark;
     final BoxDecoration decoration;
     if (highContrast) {
       decoration = const BoxDecoration(
@@ -983,6 +1098,11 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                       child: SegmentedButton<ThemeMode>(
                         segments: const [
                           ButtonSegment(
+                            value: ThemeMode.system,
+                            label: Text('Auto'),
+                            icon: Icon(Icons.brightness_auto, size: 16),
+                          ),
+                          ButtonSegment(
                             value: ThemeMode.light,
                             label: Text('Light'),
                             icon: Icon(Icons.light_mode, size: 16),
@@ -993,11 +1113,11 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                             icon: Icon(Icons.dark_mode, size: 16),
                           ),
                         ],
-                        selected: {
-                          settings.themeMode == ThemeMode.system
-                              ? ThemeMode.dark
-                              : settings.themeMode,
-                        },
+                        // Reported honestly. This used to show `Dark` while the
+                        // setting was `system`, so a display left on the system
+                        // default looked like it had been forced dark and there
+                        // was no way back to auto from this screen at all.
+                        selected: {settings.themeMode},
                         onSelectionChanged: (val) =>
                             notifier.setThemeMode(val.first),
                       ),
@@ -1294,18 +1414,18 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
         Responsive.isTablet(context) || Responsive.isDesktop(context);
 
     final elapsedMinutes = DateTime.now().difference(order.timestamp).inMinutes;
-    final isDark =
-        settings.themeMode == ThemeMode.dark || settings.clientHighContrast;
+    final isDark = isDarkBoard(context, settings);
     final isLate = elapsedMinutes >= 15;
     final pulse = ref.watch(globalPulseProvider).value ?? 1.0;
 
     Color agingColor;
     if (elapsedMinutes < 5) {
       agingColor = const Color(0xFF22C55E);
-    } else if (elapsedMinutes < 10)
+    } else if (elapsedMinutes < 10) {
       agingColor = const Color(0xFFFACC15);
-    else
+    } else {
       agingColor = const Color(0xFFDC2626);
+    }
 
     final displayItems = order.items.where((item) {
       if (stationFilter == 'GENERAL' || stationFilter == 'EXPO') return true;

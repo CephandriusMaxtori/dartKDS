@@ -61,6 +61,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # Drives a real shelf server + real WebSocket clients in tests, so the host's
+  # broadcast and client-registration paths are exercised over an actual socket
+  # rather than a mock. HostServer and the client link are otherwise only
+  # reachable on-device.
+  http: ^1.2.0
+
+  # `StreamQueue`, used to read a socket's frames in order without losing any.
+  async: ^2.11.0
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

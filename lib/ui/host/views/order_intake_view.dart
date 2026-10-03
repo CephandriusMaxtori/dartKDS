@@ -24,16 +24,25 @@ class OrderIntakeView extends ConsumerStatefulWidget {
   const OrderIntakeView({super.key});
 
   @override
-  ConsumerState<OrderIntakeView> createState() => _OrderIntakeViewState();
+  ConsumerState<OrderIntakeView> createState() => OrderIntakeViewState();
 }
 
-class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
+@visibleForTesting
+class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   late ConfettiController _confettiController;
   String _searchQuery = '';
   String _selectedCategory = 'ALL';
   String _selectedTag = 'ALL';
   bool _filtersExpanded = false;
   Timer? _searchDebounce;
+
+  /// Restores the old phone behaviour, where the order summary was laid over
+  /// the menu instead of beside it. Kept so a regression test can assert that
+  /// the sheet really does cover the menu when this is on — otherwise "the menu
+  /// is still scrollable" would pass for the wrong reason if the layout changed
+  /// shape again.
+  @visibleForTesting
+  bool overlaySheetOnPhone = false;
 
   @override
   void initState() {
@@ -65,36 +74,79 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final theme = Theme.of(context);
     final intakeState = ref.watch(intakeProvider);
 
+    // On a phone the order summary used to be a `Positioned` overlay on top of
+    // the menu, with no space reserved for it. The bottom rows of the menu grid
+    // sat underneath the sheet and its own ListView swallowed the drag, so
+    // adding the first item made the lower half of the menu unreachable. The
+    // sheet is a real row here instead, so the menu shrinks and stays scrollable.
+    final showSummary = intakeState.items.isNotEmpty;
+    final summaryHeight = showSummary ? _bottomSheetHeight(context) : 0.0;
+
+    final menu = RepaintBoundary(child: _buildMenuSection(context));
+
     return Stack(
       children: [
-        Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: RepaintBoundary(child: _buildMenuSection(context)),
-            ),
-            if (isTablet && intakeState.items.isNotEmpty)
-              Container(
-                width: 360,
-                decoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(color: theme.dividerColor, width: 2),
+        if (isTablet)
+          Row(
+            children: [
+              Expanded(flex: 3, child: menu),
+              if (showSummary)
+                Container(
+                  width: 360,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: theme.dividerColor, width: 2),
+                    ),
+                  ),
+                  // Explicit height. `panelContent` is a Column with an Expanded
+                  // list, so an unbounded height here would throw instead of
+                  // laying out.
+                  height: MediaQuery.sizeOf(context).height,
+                  child: RepaintBoundary(
+                    child: _buildOrderSummarySection(
+                      context,
+                      isSidePanel: true,
+                    ),
                   ),
                 ),
-                child: RepaintBoundary(
-                  child: _buildOrderSummarySection(context, isSidePanel: true),
+            ],
+          )
+        else if (overlaySheetOnPhone)
+          Stack(
+            children: [
+              menu,
+              if (showSummary)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: RepaintBoundary(
+                    child: SizedBox(
+                      height: summaryHeight,
+                      child: _buildOrderSummarySection(
+                        context,
+                        isSidePanel: false,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-          ],
-        ),
-        if (!isTablet && intakeState.items.isNotEmpty)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: RepaintBoundary(
-              child: _buildOrderSummarySection(context, isSidePanel: false),
-            ),
+            ],
+          )
+        else
+          Column(
+            children: [
+              Expanded(child: menu),
+              if (showSummary)
+                RepaintBoundary(
+                  child: SizedBox(
+                    height: summaryHeight,
+                    child: _buildOrderSummarySection(
+                      context,
+                      isSidePanel: false,
+                    ),
+                  ),
+                ),
+            ],
           ),
         IgnorePointer(
           child: Align(
@@ -376,27 +428,40 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        '\$${item.price.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 12,
-                                          color: isOut
-                                              ? theme.hintColor
-                                              : theme.colorScheme.primary,
+                                      // Flexible on both sides: at four columns
+                                      // on a narrow phone the tile is barely
+                                      // wider than the two labels, and a rigid
+                                      // Row overflowed by a couple of pixels.
+                                      Flexible(
+                                        child: Text(
+                                          '\$${item.price.toStringAsFixed(2)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 12,
+                                            color: isOut
+                                                ? theme.hintColor
+                                                : theme.colorScheme.primary,
+                                          ),
                                         ),
                                       ),
                                       if (item.trackStock)
-                                        Text(
-                                          isOut
-                                              ? 'OUT'
-                                              : '${item.stockQuantity}',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                            color: isOut
-                                                ? Colors.red
-                                                : theme.hintColor,
+                                        Flexible(
+                                          child: Text(
+                                            isOut
+                                                ? 'OUT'
+                                                : '${item.stockQuantity}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.end,
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              color: isOut
+                                                  ? Colors.red
+                                                  : theme.hintColor,
+                                            ),
                                           ),
                                         ),
                                     ],
@@ -424,7 +489,6 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   }) {
     final intakeState = ref.watch(intakeProvider);
     final theme = Theme.of(context);
-    final screenHeight = MediaQuery.of(context).size.height;
 
     final isEditingOrder = intakeState.editingOrderUuid != null;
 
@@ -536,9 +600,8 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(ctx);
-    ref.read(intakeProvider.notifier).clear();
-    if (!context.mounted) return;
-
+                              ref.read(intakeProvider.notifier).clear();
+                              if (!context.mounted) return;
                             },
                             child: const Text(
                               'CLEAR',
@@ -645,9 +708,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       ),
                     ),
                     icon: Icon(
-                      isEditingOrder
-                          ? Icons.sync_rounded
-                          : Icons.bolt_rounded,
+                      isEditingOrder ? Icons.sync_rounded : Icons.bolt_rounded,
                       size: 18,
                     ),
                     label: Text(
@@ -673,9 +734,7 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     if (isSidePanel) {
       return panelContent;
     } else {
-      final bottomHeight = (screenHeight * 0.4).clamp(200.0, 340.0);
       return Container(
-        height: bottomHeight,
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
@@ -689,6 +748,20 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
         child: panelContent,
       );
     }
+  }
+
+  /// Height of the order summary sheet on a phone.
+  ///
+  /// Kept as a fraction of the screen but capped, and never so tall that the
+  /// menu is left with nothing to scroll. The caller lays this out as a row, so
+  /// whatever the sheet takes, the menu keeps the rest.
+  double _bottomSheetHeight(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final clamped = (screenHeight * 0.4).clamp(200.0, 340.0);
+    // Leave the menu at least this much, so the grid never collapses to a
+    // sliver on a short screen.
+    final ceiling = (screenHeight - 220).clamp(120.0, screenHeight);
+    return clamped > ceiling ? ceiling : clamped;
   }
 
   Widget _buildFilterChipRow({
@@ -1042,35 +1115,31 @@ class _OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
 
     final isEditing = state.editingOrderUuid != null;
     final orderUuid = state.editingOrderUuid ?? const Uuid().v4();
-    final orderName = state.customerName.isEmpty
-        ? 'Guest'
-        : state.customerName;
+    final orderName = state.customerName.isEmpty ? 'Guest' : state.customerName;
 
     // Stock decrements, order edits and the kitchen broadcast all live behind
     // the store, so this is identical on a native host and in a browser.
-    await ref.read(hostStoreProvider).submitOrder(
-      orderUuid: orderUuid,
-      customerName: orderName,
-      lines: state.items
-          .map(
-            (i) {
-              double itemUnitPrice = i.menuItem.price;
-              for (final mod in i.selectedModifiers) {
-                itemUnitPrice += parseModifierPrice(mod);
-              }
-              return OrderLine(
-                menuItemId: i.menuItem.id,
-                name: i.menuItem.name,
-                modifiers: i.selectedModifiers,
-                stationTag: i.menuItem.defaultStation,
-                quantity: i.quantity,
-                price: itemUnitPrice,
-              );
-            },
-          )
-          .toList(),
-      isEditing: isEditing,
-    );
+    await ref
+        .read(hostStoreProvider)
+        .submitOrder(
+          orderUuid: orderUuid,
+          customerName: orderName,
+          lines: state.items.map((i) {
+            double itemUnitPrice = i.menuItem.price;
+            for (final mod in i.selectedModifiers) {
+              itemUnitPrice += parseModifierPrice(mod);
+            }
+            return OrderLine(
+              menuItemId: i.menuItem.id,
+              name: i.menuItem.name,
+              modifiers: i.selectedModifiers,
+              stationTag: i.menuItem.defaultStation,
+              quantity: i.quantity,
+              price: itemUnitPrice,
+            );
+          }).toList(),
+          isEditing: isEditing,
+        );
     ref.read(intakeProvider.notifier).clear();
     if (!context.mounted) return;
 

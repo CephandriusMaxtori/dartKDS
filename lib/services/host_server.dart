@@ -14,6 +14,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart'
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import '../models/database.dart';
 import '../models/connected_client.dart';
 import '../models/order_status.dart';
@@ -71,15 +72,34 @@ const _webUiMissingHtml = '''
 class HostServer {
   final Map<String, WebSocketChannel> _clientChannels = {};
   final Map<String, WebSocketChannel> _webHostChannels = {};
+
+  /// When each registered client was last heard from. A half-open socket looks
+  /// alive to `_clients` forever otherwise: the kitchen believes a tablet is
+  /// still on the line, station routing keeps sending to a dead sink, and the
+  /// display never receives the re-registration that would have fixed it.
+  final Map<String, DateTime> _clientLastSeen = {};
+
+  /// How often the roster is swept for clients that stopped answering.
+  static const Duration _silentSweepInterval = Duration(seconds: 20);
+
+  /// How long a client may go without sending anything before it is evicted.
+  /// Clients answer the host's ping, so this is roughly three missed rounds —
+  /// generous enough to survive a tablet waking from sleep, tight enough that a
+  /// genuinely dead display leaves the roster well before service.
+  static const Duration _clientSilenceLimit = Duration(seconds: 75);
+
   final List<ConnectedClient> _clients = [];
   final List<StreamSubscription> _dbWatchers = [];
   Timer? _webHostNotifyDebounce;
   HttpServer? _server;
   KDSDatabase? _db;
-  int _port = 8080;
+  /// What was actually bound, as opposed to what was requested. Everything that
+  /// advertises this host to a display must read [port].
+  int _boundPort = 0;
   String hostId = '';
   String role = 'primary';
   Timer? _heartbeatTimer;
+  Timer? _suspectTimer;
 
   // Provides the list of known sync peers ({hostId, role, url}) so the web
   // UI can discover failover targets. Set after SyncService starts.
@@ -96,6 +116,23 @@ class HostServer {
   List<ConnectedClient> get connectedClients => List.unmodifiable(_clients);
 
   bool get isRunning => _server != null;
+
+  /// The port actually bound, or 0 when not running.
+  ///
+  /// Requesting port 0 asks the OS for any free port, so callers building a URL
+  /// from it need this rather than the requested value. Everything the app
+  /// displays to a user goes through here: with the requested port echoed back,
+  /// a host on an ephemeral port would advertise `http://<ip>:0` and every
+  /// display pointed at it would fail to connect.
+  int get port => _boundPort;
+
+  /// Ranks a LAN address for display, preferring the subnet a kitchen display
+  /// is most likely to reach.
+  ///
+  /// Exposed so the settings screen can show the same address the host
+  /// advertises. The two used to be separate copies that could drift apart, and
+  /// the screen's copy ranked every `172.` address above a real private range.
+  static int rankLanAddress(String ip) => _lanAddressRank(ip);
 
   Future<void>? _startFuture;
 
@@ -116,7 +153,6 @@ class HostServer {
 
   Future<void> _start(KDSDatabase db, {int port = 8080}) async {
     _db = db;
-    _port = port;
     final router = Router();
 
     _heartbeatTimer?.cancel();
@@ -127,6 +163,11 @@ class HostServer {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
+    });
+
+    _suspectTimer?.cancel();
+    _suspectTimer = Timer.periodic(_silentSweepInterval, (_) {
+      _evictSilentClients();
     });
 
     // API: Get Menu Items
@@ -625,10 +666,21 @@ class HostServer {
           (message) async {
             try {
               final data = jsonDecode(message.toString());
+              _noteClientActivity(clientId);
 
               if (data['type'] == 'RegisterClient') {
                 clientId = data['id'];
+                // A client reconnecting under the same id replaces its old
+                // socket. Closing the previous one stops a zombie channel from
+                // lingering in the roster after the display has moved on.
+                final previous = _clientChannels[clientId!];
                 _clientChannels[clientId!] = webSocket;
+                if (!identical(previous, webSocket)) {
+                  previous?.sink.close();
+                }
+                // Nothing else to do with the old socket: its teardown is now a
+                // no-op because it is no longer the registered channel.
+                _clientLastSeen[clientId!] = DateTime.now();
 
                 _clients.removeWhere((c) => c.id == clientId);
                 _clients.add(
@@ -1206,6 +1258,13 @@ class HostServer {
                   onClientsChanged?.call();
                   _notifyWebHostDebounced();
                 }
+              } else if (data['type'] == 'ping') {
+                // The client's liveness probe. Replying keeps its watchdog
+                // satisfied, and doubles as proof the socket still carries
+                // traffic in both directions.
+                _send(webSocket, jsonEncode({'type': 'pong'}));
+              } else if (data['type'] == 'pong') {
+                // Answer to the host's heartbeat.
               } else if (data['type'] != 'RegisterClient' &&
                   data['type'] != 'RegisterWebHost') {
                 broadcast(message);
@@ -1214,15 +1273,22 @@ class HostServer {
               print('Error handling WS message: $e');
             }
           },
-          onDone: () {
-            if (isWebHost && clientId != null) {
-              _webHostChannels.remove(clientId);
-            } else if (clientId != null) {
-              _clientChannels.remove(clientId);
-              _clients.removeWhere((c) => c.id == clientId);
-              onClientsChanged?.call();
-              _notifyWebHostDebounced();
+        onDone: () {
+            if (isWebHost) {
+              _dropWebHost(clientId, webSocket);
+            } else {
+              // Always run the teardown, even for a socket that never sent a
+              // registration. Otherwise an unregistered connection that dies
+              // leaves nothing behind but an entry nothing will ever clear.
+              // Scoped to this socket so a reconnect's late close cannot evict
+              // the connection that replaced it.
+              _dropClient(clientId, notify: true, channel: webSocket);
             }
+          },
+          onError: (Object error) {
+            // Without this the error reaches the zone unhandled and can take
+            // down the whole host process over one misbehaving tablet.
+            debugPrint('KDS websocket error: $error');
           },
         );
       }),
@@ -1237,7 +1303,14 @@ class HostServer {
 
     _startDbWatchers();
 
-    _server = await io.serve(router.call, InternetAddress.anyIPv4, port);
+    // No onError here on purpose: shelf's `serve` installs its own error zone
+    // around the request loop, so a client resetting a connection mid-response
+    // is logged rather than crashing the serve loop.
+    final server = await io.serve(router.call, InternetAddress.anyIPv4, port);
+    // The bound port, not the requested one: they differ whenever 0 was asked
+    // for, and everything that advertises this host to a display reads this.
+    _boundPort = server.port;
+    _server = server;
   }
 
   void setIdentity(String hostId, String role) {
@@ -1351,21 +1424,36 @@ class HostServer {
         }
       }
       if (ips.isNotEmpty) {
-        ips.sort((a, b) {
-          int score(String ip) {
-            if (ip.startsWith('192.168.')) return 0;
-            if (ip.startsWith('10.')) return 1;
-            if (ip.startsWith('172.')) return 2;
-            if (ip.startsWith('169.254.')) return 4;
-            return 3;
-          }
-
-          return score(a).compareTo(score(b));
-        });
-        return 'http://${ips.first}:$_port';
+        // Prefer the interface the OS would actually route LAN traffic out of.
+        // `NetworkInterface.list` order is not stable across platforms, and
+        // picking a virtual adapter (VPN, Hyper-V, Docker) first produced a URL
+        // no display on the real network could reach.
+        ips.sort((a, b) => _lanAddressRank(a).compareTo(_lanAddressRank(b)));
+        return 'http://${ips.first}:$_boundPort';
       }
     } catch (_) {}
-    return 'http://localhost:$_port';
+    return 'http://localhost:$_boundPort';
+  }
+
+  /// Orders LAN addresses by how likely a kitchen display is to reach them.
+  ///
+  /// Shared with the settings screen so the address the host advertises and the
+  /// one shown for manual entry can never disagree. The old duplicated copies
+  /// ranked `172.` above everything else, which put a carrier-grade NAT or
+  /// Docker subnet ahead of the actual kitchen router.
+  static int _lanAddressRank(String ip) {
+    if (ip.startsWith('192.168.')) return 0;
+    if (ip.startsWith('10.')) return 1;
+    if (ip.startsWith('172.')) {
+      // Only 172.16-172.31 is RFC 1918 private space; the rest is public and
+      // should never be chosen for a LAN host.
+      final second = int.tryParse(ip.split('.').elementAtOrNull(1) ?? '');
+      if (second != null && second >= 16 && second <= 31) return 2;
+      return 6;
+    }
+    // Self-assigned means DHCP failed — the host has no working lease.
+    if (ip.startsWith('169.254.')) return 5;
+    return 4;
   }
 
   String? _findWebUiDir() {
@@ -1472,6 +1560,9 @@ class HostServer {
     return _webBundleCache = map;
   }
 
+  @visibleForTesting
+  void debugForceEvictSilentClients() => evictSilentClients();
+
   Response _webResponse(
     String path,
     List<int> bytes, {
@@ -1496,12 +1587,21 @@ class HostServer {
   Future<void> stop() async {
     _startFuture = null;
     _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _suspectTimer?.cancel();
+    _suspectTimer = null;
     _webHostNotifyDebounce?.cancel();
+    _webHostNotifyDebounce = null;
     for (final sub in _dbWatchers) {
       sub.cancel();
     }
     _dbWatchers.clear();
-    await _server?.close(force: true);
+    // Nulled before the await, or a `start()` racing in behind the close sees a
+    // still-non-null `_server`, believes the server is up, and never binds.
+    final server = _server;
+    _server = null;
+    _boundPort = 0;
+    await server?.close(force: true);
     for (var client in _clientChannels.values) {
       client.sink.close();
     }
@@ -1510,21 +1610,133 @@ class HostServer {
     }
     _clientChannels.clear();
     _webHostChannels.clear();
+    _clientLastSeen.clear();
     _clients.clear();
   }
 
   void broadcast(dynamic message) {
-    for (final client in _clientChannels.values) {
-      client.sink.add(message);
+    // Adding to a dead sink throws, and one throwing client must not stop the
+    // broadcast reaching the rest of the kitchen — iterate a copy and drop the
+    // offenders as we go.
+    for (final entry in _clientChannels.entries.toList()) {
+      if (!_send(entry.value, message)) {
+        _dropClient(entry.key, notify: false);
+      }
     }
   }
 
   void broadcastToStation(String station, dynamic message) {
     final target = station.toUpperCase();
-    for (var i = 0; i < _clients.length; i++) {
-      if (_clients[i].currentStation.toUpperCase() == target) {
-        _clientChannels[_clients[i].id]?.sink.add(message);
+    for (final client in _clients.toList()) {
+      if (client.currentStation.toUpperCase() != target) continue;
+      final channel = _clientChannels[client.id];
+      if (channel == null) continue;
+      if (!_send(channel, message)) {
+        _dropClient(client.id, notify: false);
       }
+    }
+  }
+
+  /// Writes one frame, reporting success instead of throwing. Returns false when
+  /// the sink is gone, so callers can evict the dead socket and keep going.
+  bool _send(WebSocketChannel channel, dynamic message) {
+    try {
+      channel.sink.add(message);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Removes a client from every roster it appears in. Safe to call for a
+  /// client that is already gone.
+  ///
+  /// [channel] is the socket the caller is tearing down. It only removes the
+  /// registration if that socket is still the registered one: a display that
+  /// reconnects on a blip closes its old socket, and that close arrives *after*
+  /// the new registration has replaced it. Evicting on id alone meant the late
+  /// close threw away a healthy connection, and the display was dropped from the
+  /// roster until it happened to reconnect again.
+  void _dropClient(String? clientId, {required bool notify, WebSocketChannel? channel}) {
+    if (clientId == null) return;
+    final registered = _clientChannels[clientId];
+    if (channel != null && !identical(registered, channel)) {
+      // A newer socket has taken this id over; this teardown is stale.
+      return;
+    }
+    final before = _clients.length;
+    _clients.removeWhere((c) => c.id == clientId);
+    final removed = _clients.length != before;
+    _clientChannels.remove(clientId)?.sink.close();
+    _clientLastSeen.remove(clientId);
+    if (removed && notify) {
+      onClientsChanged?.call();
+      _notifyWebHostDebounced();
+    }
+  }
+
+  /// Drops a web-host registration on teardown, subject to the same
+  /// already-replaced check as [_dropClient].
+  void _dropWebHost(String? webHostId, WebSocketChannel channel) {
+    if (webHostId == null) return;
+    if (!identical(_webHostChannels[webHostId], channel)) return;
+    _webHostChannels.remove(webHostId)?.sink.close();
+  }
+
+  /// Evicts registered clients that have stopped sending anything within
+  /// [limit]. A client that closes cleanly never reaches this; this only catches
+  /// sockets that died without a close frame, which on a Wi-Fi link is the common
+  /// case.
+  @visibleForTesting
+  void evictSilentClients({Duration? limit}) =>
+      _evictSilentClients(limit ?? _clientSilenceLimit);
+
+  void _evictSilentClients([Duration? limitOverride]) {
+    final limit = limitOverride ?? _clientSilenceLimit;
+    if (_clientChannels.isEmpty) {
+      _clientLastSeen.clear();
+      return;
+    }
+
+    final now = DateTime.now();
+    for (final id in _clientChannels.keys.toList()) {
+      final lastSeen = _clientLastSeen[id];
+      if (lastSeen == null) {
+        // Registered but never heard from: start the clock rather than evicting
+        // on the first sweep, in case the reply is merely in flight.
+        _clientLastSeen[id] = now;
+        continue;
+      }
+      if (now.difference(lastSeen) > limit) {
+        debugPrint('KDS client $id went silent; evicting');
+        _dropClient(id, notify: true);
+      }
+    }
+    _clientLastSeen.removeWhere((id, _) => !_clientChannels.containsKey(id));
+  }
+
+  /// Backdates a client's last-seen stamp so a test can reach the eviction path
+  /// without waiting out the real grace period.
+  @visibleForTesting
+  void debugMarkClientStale(String clientId) {
+    _clientLastSeen[clientId] = DateTime.now().subtract(_clientSilenceLimit * 2);
+  }
+
+  /// Closes a client's socket server-side while leaving its roster entry in
+  /// place. Writing to a closed sink throws, which is exactly what a peer that
+  /// vanished mid-frame looks like to the broadcast loop, so this reproduces the
+  /// condition that used to abort delivery to every other display.
+  @visibleForTesting
+  void debugCloseClientSocket(String clientId) {
+    _clientChannels[clientId]?.sink.close();
+  }
+
+  /// Records traffic from a client so the silence sweep can tell a live socket
+  /// from a dead one.
+  void _noteClientActivity(String? clientId) {
+    if (clientId == null) return;
+    if (_clientChannels.containsKey(clientId)) {
+      _clientLastSeen[clientId] = DateTime.now();
     }
   }
 
@@ -1760,86 +1972,125 @@ class HostServer {
 
       // Square webhooks can be wrapped in a 'data' object
       final orderData = body['data']?['object']?['order'] ?? body['order'];
-      if (orderData == null) {
+      if (orderData is! Map) {
         return Response.badRequest(body: 'Square Order data not found');
       }
+      final squareOrderId = (body['data']?['object']?['order']?['id'] ??
+              body['order']?['id'] ??
+              body['id'])
+          ?.toString();
 
-      await _processSquareOrder(orderData);
+      await _processSquareOrder(
+        orderData.cast<String, dynamic>(),
+        squareOrderId: squareOrderId,
+      );
       return Response.ok(jsonEncode({'success': true}));
     } catch (e) {
-      print('Square Webhook Error: $e');
-      return Response.internalServerError(body: e.toString());
+      debugPrint('Square Webhook Error: $e');
+      // The message is logged, not returned: it can quote row data from the
+      // order, and the caller is an unauthenticated LAN endpoint.
+      return Response.internalServerError(
+        body: jsonEncode({
+          'success': false,
+          'error': 'Order could not be processed',
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
     }
   }
 
-  Future<void> _processSquareOrder(Map<String, dynamic> orderData) async {
+  /// Square order ids this host has already ingested, newest last.
+  ///
+  /// Square redelivers a webhook whenever it does not see a 2xx, and this host
+  /// used to guarantee a retry: a `RangeError` in the customer-id formatting, or
+  /// a crash between the order insert and the item inserts, each turned into a
+  /// 500. Every retry fired the same ticket at the kitchen again. Bounded
+  /// because redelivery happens within minutes, not days.
+  final Set<String> _seenSquareOrders = <String>{};
+  static const int _maxSeenSquareOrders = 500;
+
+  Future<void> _processSquareOrder(
+    Map<String, dynamic> orderData, {
+    String? squareOrderId,
+  }) async {
     final db = _db!;
+
+    if (squareOrderId != null) {
+      if (!_seenSquareOrders.add(squareOrderId)) {
+        debugPrint('Square order $squareOrderId already ingested; ignoring retry');
+        return;
+      }
+      if (_seenSquareOrders.length > _maxSeenSquareOrders) {
+        _seenSquareOrders.remove(_seenSquareOrders.first);
+      }
+    }
+
     final orderUuid = const Uuid().v4();
     final timestamp = DateTime.now();
 
     // Extract customer name or use "Square Order"
-    String customerName = 'Square Order';
-    if (orderData['customer_id'] != null) {
-      customerName =
-          'SQ: ${orderData['customer_id'].toString().substring(0, 5)}';
-    } else if (orderData['reference_id'] != null) {
-      customerName = 'SQ: ${orderData['reference_id']}';
-    }
+    final customerName = _squareCustomerName(orderData, squareOrderId);
 
-    await db
-        .into(db.kDSOrders)
-        .insert(
-          KDSOrderData(
-            uuid: orderUuid,
-            customerName: customerName,
-            timestamp: timestamp,
-            status: OrderStatus.pending,
-            updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
+    // Stock decrements and item inserts must land together. Part-way failure
+    // left stock consumed against an order that never made it to the kitchen.
+    final jsonItems = await db.transaction(() async {
+      await db.into(db.kDSOrders).insert(
+        KDSOrderData(
+          uuid: orderUuid,
+          customerName: customerName,
+          timestamp: timestamp,
+          status: OrderStatus.pending,
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-    final List<Map<String, dynamic>> jsonItems = [];
-    final lineItems = orderData['line_items'] as List? ?? [];
+      final items = <Map<String, dynamic>>[];
+      final lineItems = orderData['line_items'] as List? ?? const [];
 
-    for (final li in lineItems) {
-      final itemName = li['name'] ?? 'Unknown Item';
-      final itemUuid = const Uuid().v4();
-      final price =
-          ((li['base_price_money']?['amount'] as num?)?.toDouble() ?? 0.0) /
-          100.0; // Square cents to dollars
+      for (final raw in lineItems) {
+        if (raw is! Map) continue;
+        final li = raw.cast<String, dynamic>();
+        final itemName = (li['name'] ?? 'Unknown Item').toString();
+        final quantity = _squareQuantity(li['quantity']);
+        final price =
+            ((li['base_price_money']?['amount'] as num?)?.toDouble() ?? 0.0) /
+            100.0; // Square cents to dollars
 
-      // Extract modifiers
-      final List<String> mods = [];
-      final modifiers = li['modifiers'] as List? ?? [];
-      for (final m in modifiers) {
-        mods.add(m['name'] ?? '');
-      }
-
-      // Smart Routing: Match with local menu to get station
-      final menuMatches = await (db.select(
-        db.menuItems,
-      )..where((t) => t.name.equals(itemName))).get();
-      String stationTag = 'GENERAL';
-      if (menuMatches.isNotEmpty) {
-        stationTag = menuMatches.first.defaultStation;
-
-        // Handle stock if tracked
-        if (menuMatches.first.trackStock) {
-          final qty = int.tryParse(li['quantity'] ?? '1') ?? 1;
-          await (db.update(
-            db.menuItems,
-          )..where((t) => t.id.equals(menuMatches.first.id))).write(
-            MenuItemsCompanion(
-              stockQuantity: drift.Value(menuMatches.first.stockQuantity - qty),
-              updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
-            ),
-          );
+        final mods = <String>[];
+        for (final m in (li['modifiers'] as List? ?? const [])) {
+          if (m is Map) mods.add((m['name'] ?? '').toString());
         }
-      }
 
-      await db
-          .into(db.kDSItems)
-          .insert(
+        // Smart Routing: Match with local menu to get station
+        final menuMatches = await (db.select(
+          db.menuItems,
+        )..where((t) => t.name.equals(itemName))).get();
+        var stationTag = 'GENERAL';
+        if (menuMatches.isNotEmpty) {
+          final menuItem = menuMatches.first;
+          stationTag = menuItem.defaultStation;
+
+          if (menuItem.trackStock) {
+            // Clamped: a webhook for more than we hold used to drive tracked
+            // stock negative, which then made the low-stock view nonsense.
+            await (db.update(
+              db.menuItems,
+            )..where((t) => t.id.equals(menuItem.id))).write(
+              MenuItemsCompanion(
+                stockQuantity: drift.Value(
+                  (menuItem.stockQuantity - quantity).clamp(0, 1 << 31),
+                ),
+                updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
+              ),
+            );
+          }
+        }
+
+        // Square sends one line item with a quantity; the kitchen expects one
+        // ticket line per unit, same as the native intake path.
+        for (var unit = 0; unit < quantity; unit++) {
+          final itemUuid = const Uuid().v4();
+          await db.into(db.kDSItems).insert(
             KDSItemsCompanion.insert(
               uuid: itemUuid,
               orderUuid: orderUuid,
@@ -1851,16 +2102,18 @@ class HostServer {
               updatedAtMs: drift.Value(DateTime.now().millisecondsSinceEpoch),
             ),
           );
-
-      jsonItems.add({
-        'uuid': itemUuid,
-        'name': itemName,
-        'modifiers': mods,
-        'stationTag': stationTag,
-        'status': ItemStatus.pending.index,
-        'price': price,
-      });
-    }
+          items.add({
+            'uuid': itemUuid,
+            'name': itemName,
+            'modifiers': mods,
+            'stationTag': stationTag,
+            'status': ItemStatus.pending.index,
+            'price': price,
+          });
+        }
+      }
+      return items;
+    });
 
     // Broadcast to all KDS clients
     broadcast(
@@ -1875,5 +2128,43 @@ class HostServer {
         },
       }),
     );
+  }
+
+  /// Builds the kitchen-visible customer label for a Square order.
+  ///
+  /// The old `substring(0, 5)` threw a `RangeError` on any customer id shorter
+  /// than five characters, which Square does send for test and manually entered
+  /// orders. That turned one webhook into a 500, and Square's retry turned it
+  /// into an endless redelivery loop against a host that could never accept it.
+  static String _squareCustomerName(
+    Map<String, dynamic> orderData,
+    String? squareOrderId,
+  ) {
+    final reference = (orderData['reference_id'] ?? '').toString().trim();
+    if (reference.isNotEmpty) return 'SQ: $reference';
+
+    final customer = (orderData['customer_id'] ?? '').toString().trim();
+    if (customer.isNotEmpty) {
+      final shortened = customer.length > 5 ? customer.substring(0, 5) : customer;
+      return 'SQ: $shortened';
+    }
+
+    if (squareOrderId != null && squareOrderId.isNotEmpty) return 'SQ: $squareOrderId';
+    return 'Square Order';
+  }
+
+  /// Square sends quantity as a string, but older payloads and hand-made
+  /// requests use a number. `int.tryParse` on a num throws rather than falling
+  /// back, which aborted the whole order.
+  static int _squareQuantity(dynamic raw) {
+    final value = switch (raw) {
+      int v => v,
+      num v => v.round(),
+      String v => int.tryParse(v) ?? double.tryParse(v)?.round(),
+      _ => null,
+    };
+    if (value == null || value < 1) return 1;
+    // Bounded so a hostile or malformed quantity cannot spin the insert loop.
+    return value.clamp(1, 999);
   }
 }

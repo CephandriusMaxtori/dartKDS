@@ -83,7 +83,21 @@ class ContentType {
 }
 
 class HttpServer {
+  /// Matches dart:io, where the bound port is readable after `bind`. Stands in
+  /// for the OS-assigned port when 0 was requested.
+  int get port => 0;
+  void Function(Object)? onError;
   Future<void> close({bool force = false}) async {}
+}
+
+class HttpException implements Exception {
+  HttpException(this.message, {this.uri});
+
+  final String message;
+  final Uri? uri;
+
+  @override
+  String toString() => 'HttpException: $message';
 }
 
 class Datagram {
@@ -104,7 +118,12 @@ class RawDatagramSocket {
   void send(List<int> data, InternetAddress address, int port) {}
   Datagram? receive() => null;
   void close() {}
-  void listen(void Function(RawSocketEvent event)? onData) {}
+  void listen(
+    void Function(RawSocketEvent event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {}
 }
 
 enum RawSocketEvent { read, write, close }

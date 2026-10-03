@@ -77,4 +77,10 @@ final connectedClientsProvider = StreamProvider<List<ConnectedClient>>((ref) {
   return controller.stream;
 });
 
-final clientServiceProvider = Provider((ref) => ClientService());
+final clientServiceProvider = Provider((ref) {
+  final service = ClientService();
+  // Without this the service's reconnect timer and liveness watchdog outlive the
+  // container and keep dialling a host nobody is listening to.
+  ref.onDispose(service.dispose);
+  return service;
+});

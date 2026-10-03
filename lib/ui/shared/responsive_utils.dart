@@ -62,6 +62,9 @@ class ContentWidth extends StatelessWidget {
 /// rather than the window width.
 int gridColumnsFor(double availableWidth, {int max = 3, int min = 2}) {
   if (availableWidth >= 1000) return max;
-  if (availableWidth >= 620) return 2;
-  return min;
+  // Clamped rather than hardcoded to 2. Returning a literal meant the fallback
+  // below was unreachable at the default arguments, so a caller using `min: 1`
+  // still got two columns on a narrow screen and could never collapse to one.
+  if (availableWidth >= 620) return 2.clamp(min, max);
+  return min.clamp(1, max);
 }

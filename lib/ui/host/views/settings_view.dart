@@ -7,6 +7,7 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/host_store_provider.dart';
 import '../../../models/database.dart';
 import '../../../models/connected_client.dart';
+import '../../../services/host_server.dart';
 
 class SettingsView extends ConsumerWidget {
   const SettingsView({super.key});
@@ -107,16 +108,16 @@ class SettingsView extends ConsumerWidget {
                   .expand((i) => i.addresses)
                   .where((a) => a.type == InternetAddressType.IPv4 && !a.isLoopback)
                   .toList();
-              addresses.sort((a, b) {
-                int score(String ip) {
-                  if (ip.startsWith('192.168.')) return 0;
-                  if (ip.startsWith('10.')) return 1;
-                  if (ip.startsWith('172.')) return 2;
-                  if (ip.startsWith('169.254.')) return 4;
-                  return 3;
-                }
-                return score(a.address).compareTo(score(b.address));
-              });
+              // Ranked by the same function the host uses to advertise itself,
+              // so the address shown here is the one a display should be pointed
+              // at. These were two independent copies that could rank
+              // differently, so the pairing QR code could hand a display an
+              // address the host had not chosen for itself.
+              addresses.sort(
+                (a, b) => HostServer.rankLanAddress(
+                  a.address,
+                ).compareTo(HostServer.rankLanAddress(b.address)),
+              );
               return Column(
                 children: [
                   ...addresses.map(
@@ -314,16 +315,12 @@ class SettingsView extends ConsumerWidget {
       return;
     }
 
-    ips.sort((a, b) {
-      int score(String ip) {
-        if (ip.startsWith('192.168.')) return 0;
-        if (ip.startsWith('10.')) return 1;
-        if (ip.startsWith('172.')) return 2;
-        if (ip.startsWith('169.254.')) return 4;
-        return 3;
-      }
-      return score(a).compareTo(score(b));
-    });
+    // Same ranking the host applies to the address it advertises, so the pairing
+    // code always points at the address the host itself would have chosen.
+    ips.sort(
+      (a, b) =>
+          HostServer.rankLanAddress(a).compareTo(HostServer.rankLanAddress(b)),
+    );
 
     String selectedIp = ips.first;
 
@@ -579,8 +576,12 @@ class SettingsView extends ConsumerWidget {
             ),
           ),
           TextButton(
-            onPressed: () {
+            // This used to only dismiss the dialog, so a button whose copy
+            // promised to erase the kitchen's menu and history did nothing at
+            // all. Wired to the real reset.
+            onPressed: () async {
               Navigator.pop(context);
+              await _resetEverything(context, ref);
             },
             child: const Text(
               'RESET',
@@ -593,5 +594,83 @@ class SettingsView extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Clears the menu library and order history, then tells the kitchen displays
+  /// to drop what they are showing.
+  ///
+  /// The displays hold their tickets in memory and are not re-synced until they
+  /// re-register, so without the broadcast every tablet keeps serving a board
+  /// the host no longer has any record of.
+  Future<void> _resetEverything(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
+            SizedBox(width: 10),
+            Text(
+              'Delete for good?',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Menu items, stations and order history will be deleted, and every '
+          'connected display will clear its board. This cannot be undone.',
+          style: TextStyle(color: Color(0xFF6B7280)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(
+                color: Color(0xFFDC2626),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(hostStoreProvider).clearLibrary();
+      await ref.read(hostStoreProvider).clearSalesAndHistory();
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'RESET COMPLETE',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
+          backgroundColor: Color(0xFF2AA31F),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      // Reported rather than swallowed: a reset that silently failed leaves the
+      // host holding data the operator believes they destroyed.
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'RESET FAILED: $e',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 }

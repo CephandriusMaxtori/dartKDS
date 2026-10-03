@@ -325,7 +325,10 @@ LazyDatabase _openConnection() {
 
       // Use isolate for all database operations to keep UI thread smooth
       final driftIsolate = await _createDriftIsolate(file.path);
-      return driftIsolate.connect();
+      // Awaited, not returned bare: returning the Future let it complete outside
+      // this try, so any failure surfaced as an unhandled async error instead of
+      // the wrapped, actionable message below.
+      return await driftIsolate.connect();
     } catch (e) {
       throw Exception("Failed to open database: $e");
     }
