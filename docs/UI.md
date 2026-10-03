@@ -225,11 +225,36 @@ Tap behavior: items with no modifiers, or with `oneTouch`, are added straight to
 
 | Button | Icon | Background |
 |---|---|---|
-| `SEND TO KITCHEN` | `bolt_rounded` | `#10B981` |
+| `COMPLETE ORDER` + total (new order) | `bolt_rounded` | `#10B981` |
 | `UPDATE ORDER` (when editing) | `sync_rounded` | `#10B981` |
 
+The new-order label carries the total beneath it. `UPDATE ORDER` carries none — a recalled
+order is re-sent, not re-charged.
+
 Total = `Σ (menu price + Σ modifier deltas) × qty`. Modifier deltas are parsed from strings
-like `Add Bacon +$2.00` via `RegExp(r'\+\s*\$?([0-9]+(\.[0-9]+)?)')`.
+like `Add Bacon +$2.00` via `RegExp(r'\+\s*\$?([0-9]+(\.[0-9]+)?)')`. `_cartTotal` uses the
+same per-line arithmetic as `submitOrder`, so the figure quoted in the calculator is the
+figure billed.
+
+**Payment calculator** — a new order with a total above zero opens `PAYMENT CALCULATOR`
+instead of sending straight away. Editing a recalled order, or a zero-total cart, skips it
+and sends directly.
+
+| Element | Detail |
+|---|---|
+| Title | `PAYMENT CALCULATOR` (18, w900) |
+| `TOTAL DUE` panel | divider-tinted, amount at 22 w900 |
+| `CASH RECEIVED` | centred, 24 w900, `\$ ` prefix, numeric-decimal keyboard |
+| Result panel | `CHANGE DUE:` green `#22C55E`, or `REMAINING:` orange while short |
+| Quick chips | `$5` `$10` `$20` `$50` `$100` — write the field and set the result |
+| `EXACT CHANGE` | fills the field with the total, i.e. zero change |
+| Actions | `CANCEL`, `COMPLETE ORDER` (`#111111`) |
+
+Nothing is focused or pre-filled on open: `autofocus` is off, the field starts empty and the
+result panel stays hidden until an amount is entered, so no value is selected on the cashier's
+behalf and the keyboard never covers the change figure. Only a deliberate tap on the field, a
+chip or `EXACT CHANGE` fills it. `COMPLETE ORDER` dismisses the dialog and sends the order;
+`CANCEL` sends nothing and leaves the cart intact.
 
 **Send feedback** — snackbars: `Sent to Kitchen: <name>!` or `Order "<name>" Updated!`
 (`#111111`). Heavy haptic + optional confetti on send.
@@ -629,7 +654,9 @@ Every widget, build helper, and dialog in the UI layer, with its location.
 | `_calcColumns` | 54 | Menu grid column count (3/4/5/6/7 by width) |
 | `build` | 63 | Row: menu section (flex 3) + 360px cart, or bottom cart on phones; confetti overlay |
 | `_buildMenuSection` | 122 | Search/filter bar + menu grid |
-| `_buildOrderSummarySection` | 422 | Cart panel: guest field, line items, `SEND TO KITCHEN` / `UPDATE ORDER` |
+| `_buildOrderSummarySection` | 422 | Cart panel: guest field, line items, `COMPLETE ORDER` / `UPDATE ORDER` |
+| `_cartTotal` | — | Order total, same arithmetic as `submitOrder` |
+| `_showPaymentDialog` | — | Change calculator: cash received, change due / remaining, quick chips |
 | `_buildFilterChipRow` | 696 | One horizontal chip row (category or tag) |
 | `_handleItemTap` | 754 | Adds directly, or opens the modifier dialog |
 | `_showModifierDialog` | 773 | Quantity stepper, required-modifier enforcement, `ADD ITEM` / `SAVE CHANGES` |

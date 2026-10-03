@@ -491,6 +491,7 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
     final theme = Theme.of(context);
 
     final isEditingOrder = intakeState.editingOrderUuid != null;
+    final cartTotal = _cartTotal(intakeState);
 
     final panelContent = Material(
       color: theme.cardColor,
@@ -711,17 +712,41 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       isEditingOrder ? Icons.sync_rounded : Icons.bolt_rounded,
                       size: 18,
                     ),
-                    label: Text(
-                      isEditingOrder ? 'UPDATE ORDER' : 'SEND TO KITCHEN',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                        letterSpacing: 0.5,
-                      ),
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isEditingOrder ? 'UPDATE ORDER' : 'COMPLETE ORDER',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        // A recalled order is re-sent, not re-charged, so it
+                        // carries no total.
+                        if (!isEditingOrder && cartTotal > 0)
+                          Text(
+                            '\$${cartTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                      ],
                     ),
                     onPressed: intakeState.items.isEmpty
                         ? null
-                        : () => _sendToKitchen(context, ref),
+                        : () {
+                            // Change calculation belongs to taking money on a
+                            // new order. Editing a recalled order re-sends the
+                            // ticket, so it goes straight through.
+                            if (!isEditingOrder && cartTotal > 0) {
+                              _showPaymentDialog(context, ref, cartTotal);
+                            } else {
+                              _sendToKitchen(context, ref);
+                            }
+                          },
                   ),
                 ),
               ],
@@ -1105,6 +1130,216 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                 );
               },
             ),
+      ),
+    );
+  }
+
+  /// Order total for the payment calculator.
+  ///
+  /// Mirrors what [_sendToKitchen] bills per line — menu price plus every
+  /// modifier delta, times the quantity — so the amount the cashier is handed
+  /// is the amount the kitchen sees on the ticket. The old calculator read
+  /// `price * quantity` and left modifiers out, which made every change
+  /// calculation wrong by however much the modifiers added up to.
+  double _cartTotal(IntakeState intakeState) {
+    var total = 0.0;
+    for (final item in intakeState.items) {
+      var unitPrice = item.menuItem.price;
+      for (final mod in item.selectedModifiers) {
+        unitPrice += parseModifierPrice(mod);
+      }
+      total += unitPrice * item.quantity;
+    }
+    return total;
+  }
+
+  /// Cash-tendered dialog for a new order: shows the total, takes the amount
+  /// handed over and reports the change due.
+  ///
+  /// Nothing is focused or pre-filled on open — the field stays cold until the
+  /// cashier taps it, so the on-screen keyboard never covers the change figure
+  /// and no amount is selected on their behalf. The chips and EXACT CHANGE
+  /// fill the field only when deliberately tapped.
+  void _showPaymentDialog(BuildContext context, WidgetRef ref, double total) {
+    final controller = TextEditingController();
+    double received = 0;
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final change = (received - total).clamp(0.0, 999999.0);
+          final isShort = received > 0 && received < total;
+
+          return AlertDialog(
+            backgroundColor: theme.cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: theme.dividerColor),
+            ),
+            title: const Text(
+              'PAYMENT CALCULATOR',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.dividerColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'TOTAL DUE',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          '\$${total.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: controller,
+                    autofocus: false,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      labelText: 'CASH RECEIVED',
+                      labelStyle: const TextStyle(fontSize: 12),
+                      prefixText: '\$ ',
+                      filled: true,
+                      fillColor: theme.scaffoldBackgroundColor,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: theme.dividerColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        received = double.tryParse(val) ?? 0;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  if (received > 0)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isShort
+                            ? Colors.orange.withValues(alpha: 0.1)
+                            : const Color(0xFF22C55E).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isShort
+                              ? Colors.orange
+                              : const Color(0xFF22C55E),
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isShort ? 'REMAINING:' : 'CHANGE DUE:',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            '\$${(isShort ? total - received : change).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: isShort
+                                  ? Colors.orange
+                                  : const Color(0xFF22C55E),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [5, 10, 20, 50, 100].map((amt) {
+                      return ActionChip(
+                        label: Text('\$$amt'),
+                        labelStyle: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                        ),
+                        onPressed: () {
+                          controller.text = amt.toString();
+                          setState(() => received = amt.toDouble());
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () {
+                      controller.text = total.toStringAsFixed(2);
+                      setState(() => received = total);
+                    },
+                    child: const Text(
+                      'EXACT CHANGE',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'CANCEL',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF111111),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _sendToKitchen(context, ref);
+                },
+                child: const Text('COMPLETE ORDER'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

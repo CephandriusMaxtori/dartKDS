@@ -90,7 +90,7 @@ void main() {
 
     // The order summary is now present...
     expect(find.text('ITEMS (1)'), findsOneWidget);
-    expect(find.text('SEND TO KITCHEN'), findsOneWidget);
+    expect(find.text('COMPLETE ORDER'), findsOneWidget);
 
     // ...and the menu is still scrollable underneath it.
     await tester.drag(find.byType(GridView), const Offset(0, -2000));
@@ -116,7 +116,7 @@ void main() {
 
     // The footer button sits inside the sheet, which now has a bounded height
     // rather than being an overlay, so it cannot be pushed off screen.
-    final send = find.text('SEND TO KITCHEN');
+    final send = find.text('COMPLETE ORDER');
     expect(send, findsOneWidget);
     final rect = tester.getRect(send);
     expect(
@@ -157,7 +157,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final grid = tester.getRect(find.byType(GridView));
-    final send = tester.getRect(find.text('SEND TO KITCHEN'));
+    final send = tester.getRect(find.text('COMPLETE ORDER'));
     expect(
       send.top,
       lessThan(grid.bottom),
@@ -179,7 +179,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final grid = tester.getRect(find.byType(GridView));
-    final send = tester.getRect(find.text('SEND TO KITCHEN'));
+    final send = tester.getRect(find.text('COMPLETE ORDER'));
     expect(
       grid.bottom,
       lessThanOrEqualTo(send.top + 0.5),
