@@ -1449,6 +1449,19 @@ class _TicketCard extends ConsumerStatefulWidget {
 }
 
 class _TicketCardState extends ConsumerState<_TicketCard> {
+  /// Drives the always-visible scrollbar on the item list.
+  ///
+  /// An explicit controller rather than the implicit primary one: the board is
+  /// a horizontal strip of these cards, so borrowing a primary controller risks
+  /// two scrollables sharing one position.
+  final ScrollController _itemScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _itemScrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
@@ -1591,104 +1604,116 @@ class _TicketCardState extends ConsumerState<_TicketCard> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: displayItems.length,
-                  itemBuilder: (context, idx) {
-                    final item = displayItems[idx];
-                    return InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        final newValue = !item.isBumped;
-                        ref
-                            .read(clientServiceProvider)
-                            .send(
-                              jsonEncode({
-                                'type': 'ItemBumped',
-                                'orderUuid': order.uuid,
-                                'itemUuid': item.uuid,
-                                'isBumped': newValue,
-                              }),
-                            );
-                        ref
-                            .read(clientStateProvider.notifier)
-                            .toggleItemBump(order.uuid, item.uuid);
-                      },
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 200),
-                        opacity: item.isBumped ? 0.3 : 1.0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: isDark
-                                    ? const Color(0xFF374151)
-                                    : Colors.grey.shade200,
-                                width: 0.5,
+                // The list is still bounded even at full board height, so an
+                // order with more items than fit — or a display at the top of
+                // the text scale range, which grows rows without growing the
+                // card — used to clip with nothing to signal there was more.
+                // Always visible: a full-length thumb means everything fits, a
+                // short one means read below.
+                child: Scrollbar(
+                  controller: _itemScrollController,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    controller: _itemScrollController,
+                    // Gutter for the scrollbar so it never sits over the text.
+                    padding: const EdgeInsets.only(right: 10),
+                    itemCount: displayItems.length,
+                    itemBuilder: (context, idx) {
+                      final item = displayItems[idx];
+                      return InkWell(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          final newValue = !item.isBumped;
+                          ref
+                              .read(clientServiceProvider)
+                              .send(
+                                jsonEncode({
+                                  'type': 'ItemBumped',
+                                  'orderUuid': order.uuid,
+                                  'itemUuid': item.uuid,
+                                  'isBumped': newValue,
+                                }),
+                              );
+                          ref
+                              .read(clientStateProvider.notifier)
+                              .toggleItemBump(order.uuid, item.uuid);
+                        },
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: item.isBumped ? 0.3 : 1.0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isDark
+                                      ? const Color(0xFF374151)
+                                      : Colors.grey.shade200,
+                                  width: 0.5,
+                                ),
                               ),
                             ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  if (item.isBumped)
-                                    const Padding(
-                                      padding: EdgeInsets.only(right: 8.0),
-                                      child: Icon(
-                                        Icons.check_circle,
-                                        color: Color(0xFF22C55E),
-                                        size: 20,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (item.isBumped)
+                                      const Padding(
+                                        padding: EdgeInsets.only(right: 8.0),
+                                        child: Icon(
+                                          Icons.check_circle,
+                                          color: Color(0xFF22C55E),
+                                          size: 20,
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: Text(
+                                        item.name.toUpperCase(),
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          decoration: item.isBumped
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                        ),
                                       ),
                                     ),
-                                  Expanded(
-                                    child: Text(
-                                      item.name.toUpperCase(),
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : const Color(0xFF0F172A),
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        decoration: item.isBumped
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (item.modifiers.isNotEmpty)
-                                Container(
-                                  margin: const EdgeInsets.only(top: 4.0),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFACC15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    item.modifiers.join(', ').toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 14,
-                                    ),
-                                  ),
+                                  ],
                                 ),
-                            ],
+                                if (item.modifiers.isNotEmpty)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 4.0),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFACC15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      item.modifiers.join(', ').toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
               _buildFooter(displayItems, isDark),

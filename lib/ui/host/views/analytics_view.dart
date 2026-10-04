@@ -207,13 +207,16 @@ class AnalyticsView extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'PERFORMANCE BY ITEM',
                             style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 12,
                               letterSpacing: 1.2,
-                              color: Color(0xFF6B7280),
+                              // Secondary label, so it follows the theme. A
+                              // fixed mid-grey stayed mid-grey in the high
+                              // contrast KDS mode.
+                              color: theme.hintColor,
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -331,8 +334,8 @@ class AnalyticsView extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFF6B7280),
+              style: TextStyle(
+                color: theme.hintColor,
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.1,

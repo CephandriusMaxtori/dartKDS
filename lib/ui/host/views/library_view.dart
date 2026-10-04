@@ -92,7 +92,10 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 unselectedLabelColor: Theme.of(
                   context,
                 ).colorScheme.onSurfaceVariant,
-                indicatorColor: Theme.of(context).colorScheme.onSurface,
+                // Primary, matching sent_queue_view. This was `onSurface`, so the two tabbed
+                // screens drew their indicator in different colours and neither
+                // read as the deliberate choice.
+                indicatorColor: Theme.of(context).colorScheme.primary,
                 indicatorWeight: 3,
                 labelStyle: const TextStyle(
                   fontWeight: FontWeight.w900,
@@ -470,9 +473,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                               ),
                             ),
                             MenuItemButton(
-                              onPressed: () => store.deleteMenuItem(
-                                item.id,
-                              ),
+                              onPressed: () => _confirmDelete(
+                                  title: 'DELETE ITEM?',
+                                  message: '"${item.name}" will be removed '
+                                      'from the menu. This cannot be undone.',
+                                  onConfirm: () => store.deleteMenuItem(item.id),
+                                ),
                               leadingIcon: const Icon(
                                 Icons.delete_outline,
                                 color: Colors.red,
@@ -670,8 +676,12 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                               size: 20,
                               color: Colors.redAccent,
                             ),
-                            onPressed: () =>
-                                store.deleteStation(station.id),
+                            onPressed: () => _confirmDelete(
+                                  title: 'DELETE STATION?',
+                                  message: '"${station.name}" will be removed, '
+                                      'along with its items. This cannot be undone.',
+                                  onConfirm: () => store.deleteStation(station.id),
+                                ),
                           ),
                         ],
                       ),
@@ -761,8 +771,13 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, size: 20),
-                            onPressed: () =>
-                                store.deleteGlobalModifier(mod.id),
+                            onPressed: () => _confirmDelete(
+                              title: 'DELETE MODIFIER?',
+                              message: '"${mod.name}" will be removed from '
+                                  'every item. This cannot be undone.',
+                              onConfirm: () =>
+                                  store.deleteGlobalModifier(mod.id),
+                            ),
                           ),
                         ),
                       ),
@@ -1042,6 +1057,55 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
         ).showSnackBar(const SnackBar(content: Text('Library Cleared')));
       }
     }
+  }
+
+  /// Confirmation for a single-row delete in the library.
+  ///
+  /// The item, station and modifier deletes used to fire straight from the
+  /// button, so one stray tap on a small trash icon destroyed a row with no way
+  /// back. Every other destructive action in the app already confirms
+  /// (`CLEAR TICKET?`, `IMPORT LIBRARY`, `CLEAR ALL LIBRARY DATA?`), so these
+  /// were the odd ones out.
+  Future<void> _confirmDelete({
+    required String title,
+    required String message,
+    required Future<void> Function() onConfirm,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            color: Colors.red,
+          ),
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await onConfirm();
   }
 
   void _showAddModifierDialog(BuildContext context, HostStore store) {

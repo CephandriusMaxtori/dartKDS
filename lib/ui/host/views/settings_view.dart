@@ -22,7 +22,7 @@ class SettingsView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        _buildSectionHeader('CONNECTED CLIENTS'),
+        _buildSectionHeader(context, 'CONNECTED CLIENTS'),
         _buildCard(
           theme,
           Column(
@@ -30,15 +30,15 @@ class SettingsView extends ConsumerWidget {
               clientsAsync.when(
                 data: (clients) {
                   if (clients.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
+                    return Padding(
+                      padding: const EdgeInsets.all(16.0),
                       child: Row(
                         children: [
-                          Icon(Icons.tablet_android, color: Color(0xFF6B7280)),
-                          SizedBox(width: 12),
+                          Icon(Icons.tablet_android, color: theme.hintColor),
+                          const SizedBox(width: 12),
                           Text(
                             'No kitchen displays connected',
-                            style: TextStyle(color: Color(0xFF6B7280)),
+                            style: TextStyle(color: theme.hintColor),
                           ),
                         ],
                       ),
@@ -96,7 +96,7 @@ class SettingsView extends ConsumerWidget {
             ],
           ),
         ),
-        _buildSectionHeader('NETWORK & BLUETOOTH'),
+        _buildSectionHeader(context, 'NETWORK & BLUETOOTH'),
         _buildCard(
           theme,
           FutureBuilder<List<NetworkInterface>>(
@@ -166,7 +166,7 @@ class SettingsView extends ConsumerWidget {
             },
           ),
         ),
-        _buildSectionHeader('DISPLAY'),
+        _buildSectionHeader(context, 'DISPLAY'),
         _buildCard(
           theme,
           SwitchListTile(
@@ -183,7 +183,7 @@ class SettingsView extends ConsumerWidget {
             ),
           ),
         ),
-        _buildSectionHeader('FORMAT'),
+        _buildSectionHeader(context, 'FORMAT'),
         _buildCard(
           theme,
           Column(
@@ -215,7 +215,7 @@ class SettingsView extends ConsumerWidget {
             ],
           ),
         ),
-        _buildSectionHeader('THEME'),
+        _buildSectionHeader(context, 'THEME'),
         _buildCard(
           theme,
           ListTile(
@@ -229,7 +229,7 @@ class SettingsView extends ConsumerWidget {
             onTap: () => _showThemePicker(context, ref),
           ),
         ),
-        _buildSectionHeader('MORE'),
+        _buildSectionHeader(context, 'MORE'),
         _buildCard(
           theme,
           Column(
@@ -283,13 +283,15 @@ class SettingsView extends ConsumerWidget {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
-          color: Color(0xFF6B7280),
+        style: TextStyle(
+          // Secondary label, so it follows the theme. A fixed mid-grey stayed
+          // mid-grey in the high contrast KDS mode, where it all but vanished.
+          color: Theme.of(context).hintColor,
           fontWeight: FontWeight.w900,
           fontSize: 12,
           letterSpacing: 1.2,
