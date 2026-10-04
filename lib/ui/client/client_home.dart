@@ -39,6 +39,56 @@ bool isDarkBoard(BuildContext context, AppSettings settings) {
   };
 }
 
+/// Widest a ticket column is allowed to get before another one is added.
+const double kTicketColumnTarget = 240;
+
+/// Upper bound on ticket columns, so an ultrawide board does not end up with a
+/// grid of unreadable slivers.
+const int kTicketMaxColumns = 14;
+
+/// Grid layout for the ticket board.
+///
+/// Height comes from the board rather than from the tile's width. This used to
+/// be `childAspectRatio: 1.05`, which derived the height from the width and so
+/// handed a 12-item ticket on a 1080p board about 240px of item list — roughly
+/// two rows. Everything below that scrolled silently: no scrollbar, no edge
+/// fade, no count of what was hidden (issue #6). Sizing by height gives each
+/// card every pixel the board has instead.
+///
+/// `mainAxisExtent` takes precedence over `childAspectRatio`, which the delegate
+/// defaults to 1.0 whether or not it is passed — so the ratio is simply not in
+/// play here. Cross count still derives from the width, which means the number
+/// of tickets on screen is unchanged.
+///
+/// Top-level with a plain signature so the geometry is testable without standing
+/// up [ClientHome] and its socket and discovery work.
+SliverGridDelegate ticketGridDelegate({
+  required double maxWidth,
+  required double maxHeight,
+}) {
+  // `EdgeInsets.all(8)` on the grid (16) plus the `mainAxisSpacing` beneath a
+  // single full-height row.
+  const double gutter = 24;
+
+  // Floor rather than allowing zero, so a board squeezed into a tiny sliver
+  // degrades into "too small to read" instead of throwing on a negative extent.
+  const double minExtent = 120;
+
+  final double extent = maxHeight.isFinite
+      ? (maxHeight - gutter).clamp(minExtent, double.infinity)
+      : minExtent.toDouble();
+
+  return SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: (maxWidth / kTicketColumnTarget).floor().clamp(
+      1,
+      kTicketMaxColumns,
+    ),
+    crossAxisSpacing: 8,
+    mainAxisSpacing: 8,
+    mainAxisExtent: extent,
+  );
+}
+
 class ClientHome extends ConsumerStatefulWidget {
   const ClientHome({super.key});
 
@@ -426,20 +476,15 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                       : LayoutBuilder(
                           builder: (context, constraints) {
                             if (isTablet) {
-                              // Grid for tablets (denser = smaller tiles)
-                              int crossCount = (constraints.maxWidth / 240)
-                                  .floor()
-                                  .clamp(1, 14);
+                              // Grid for tablets (denser = smaller tiles).
+                              // Each tile takes the full board height rather
+                              // than a share of it — see [ticketGridDelegate].
                               return GridView.builder(
                                 padding: const EdgeInsets.all(8),
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: crossCount,
-                                      crossAxisSpacing: 8,
-                                      mainAxisSpacing: 8,
-                                      childAspectRatio:
-                                          1.05, // shorter = smaller tiles
-                                    ),
+                                gridDelegate: ticketGridDelegate(
+                                  maxWidth: constraints.maxWidth,
+                                  maxHeight: constraints.maxHeight,
+                                ),
                                 itemCount: tickets.length,
                                 itemBuilder: (context, index) =>
                                     _buildAnimatedTicket(

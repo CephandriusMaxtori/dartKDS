@@ -482,8 +482,13 @@ light, `#1F2937` in dark.
 ### 13.2 Ticket grid / list
 
 - **Tablet and desktop:** `GridView`, padding 8, `crossAxisCount = (maxWidth / 240).floor().clamp(1, 14)`,
-  spacing 8, `childAspectRatio: 1.05`.
-- **Phone:** horizontal `ListView`; ticket width 240 in rush mode, 290 otherwise.
+  spacing 8. Tile height comes from the board, not the width: `mainAxisExtent = (maxHeight - 24).clamp(120, ∞)`,
+  where 24 is the 8px grid padding (16) plus the 8px main-axis spacing under the single full-height row.
+  This replaced `childAspectRatio: 1.05`, which capped a ticket at roughly two visible item rows regardless
+  of how much board was left below it. Built by the top-level `ticketGridDelegate(maxWidth:, maxHeight:)`
+  in `client_home.dart` so the geometry is testable without booting the client.
+- **Phone:** horizontal `ListView`; ticket width 240 in rush mode, 290 otherwise. A horizontal `ListView`
+  already gives each child the full cross-axis extent, so phone tickets were always full height.
 - New tickets animate in over 600ms with `Curves.elasticOut` (scale 0.8 → 1.0 plus fade) keyed
   by order uuid.
 
