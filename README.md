@@ -7,6 +7,8 @@ DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed 
 
 **No cloud. No subscriptions. No internet required.**
 
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.hoid.kds.dartkds%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FCephandriusMaxtori%252FdartKDS%2522%252C%2522author%2522%253A%2522CephandriusMaxtori%2522%252C%2522name%2522%253A%2522DartKDS%2522%257D"><img src="assets/obtainium-badge.png" height="48" alt="Get it on Obtainium"></a>
+
 ---
 
 ## 📸 Screenshots
@@ -30,6 +32,19 @@ DartKDS is a lightweight, self-hosted **Kitchen Display System (KDS)** designed 
 - 🌓 **Adaptive UI** — Light mode for Front-of-House and a high-contrast Dark Mode for the Kitchen.
 - 🔋 **Keep Screen On** — Prevent the host display from sleeping during service (optional).
 - 🔔 **Kitchen Broadcasts** — Push alerts (86s, rush notices, etc.) straight to station screens.
+
+---
+
+## 📲 Install on Android
+
+DartKDS ships as release APKs on GitHub, so you can install and auto-update it straight from source with [Obtainium](https://obtainium.imranr.dev) — no Play Store, no sideloading.
+
+- **With Obtainium:** tap the badge above, or open Obtainium, tap **Add**, and paste `https://github.com/CephandriusMaxtori/dartKDS`.
+- **Without it:** download an APK from [Releases](https://github.com/CephandriusMaxtori/dartKDS/releases/latest) and install it manually.
+
+Obtainium picks the CPU-ABI build matching your device automatically and notifies you when a new version is published. Allow installs from Obtainium when prompted.
+
+> Each release ships three APKs (`arm64-v8a`, `armeabi-v7a`, `x86_64`). Roughly every current phone is `arm64-v8a`; older 32-bit devices and emulators want the other two.
 
 ---
 
