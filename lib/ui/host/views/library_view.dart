@@ -33,6 +33,7 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
   bool _trackStock = false;
   bool _oneTouch = false;
   String? _selectedStation;
+  String _sortBy = 'name';
 
   @override
   void dispose() {
@@ -147,6 +148,24 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
           return const Center(child: CircularProgressIndicator());
         }
         final items = snapshot.data!;
+        final sortedItems = [...items];
+        switch (_sortBy) {
+          case 'name':
+            sortedItems.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            break;
+          case 'price_asc':
+            sortedItems.sort((a, b) => a.price.compareTo(b.price));
+            break;
+          case 'price_desc':
+            sortedItems.sort((a, b) => b.price.compareTo(a.price));
+            break;
+          case 'category':
+            sortedItems.sort((a, b) => a.category.toLowerCase().compareTo(b.category.toLowerCase()));
+            break;
+          case 'station':
+            sortedItems.sort((a, b) => a.defaultStation.toLowerCase().compareTo(b.defaultStation.toLowerCase()));
+            break;
+        }
 
         return CustomScrollView(
           slivers: [
@@ -355,11 +374,50 @@ class _LibraryViewState extends ConsumerState<LibraryView> {
                 ),
               ),
             ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      'MENU ITEMS (${sortedItems.length})',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        color: theme.hintColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const Spacer(),
+                    DropdownButton<String>(
+                      value: _sortBy,
+                      underline: const SizedBox(),
+                      isDense: true,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'name', child: Text('Sort: Name (A-Z)')),
+                        DropdownMenuItem(value: 'price_asc', child: Text('Sort: Price (Low-High)')),
+                        DropdownMenuItem(value: 'price_desc', child: Text('Sort: Price (High-Low)')),
+                        DropdownMenuItem(value: 'category', child: Text('Sort: Category')),
+                        DropdownMenuItem(value: 'station', child: Text('Sort: Station')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _sortBy = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  final item = items[index];
+                  final item = sortedItems[index];
                   return Material(
                     color: theme.cardColor,
                     borderRadius: BorderRadius.circular(8),

@@ -289,7 +289,7 @@ class _WakelockSyncState extends ConsumerState<_WakelockSync> {
   Widget build(BuildContext context) {
     final role = ref.watch(deviceRoleProvider);
     final keepOn = ref.watch(settingsProvider.select((s) => s.keepScreenOn));
-    final shouldStayOn = keepOn && role == DeviceRole.host;
+    final shouldStayOn = keepOn && (role == DeviceRole.host || role == DeviceRole.client);
     WidgetsBinding.instance.addPostFrameCallback((_) => _sync(shouldStayOn));
     return widget.child;
   }

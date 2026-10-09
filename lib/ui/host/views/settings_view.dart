@@ -560,13 +560,14 @@ class SettingsView extends ConsumerWidget {
             Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
             SizedBox(width: 10),
             Text(
-              'Reset Everything?',
+              'Reset Application?',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             ),
           ],
         ),
         content: const Text(
-          'This will permanently delete all menu items and your order history. This cannot be undone.',
+          'Menu items, stations and order history will be deleted, and every '
+          'connected display will clear its board. This cannot be undone.',
           style: TextStyle(color: Color(0xFF6B7280)),
         ),
         actions: [
@@ -578,9 +579,6 @@ class SettingsView extends ConsumerWidget {
             ),
           ),
           TextButton(
-            // This used to only dismiss the dialog, so a button whose copy
-            // promised to erase the kitchen's menu and history did nothing at
-            // all. Wired to the real reset.
             onPressed: () async {
               Navigator.pop(context);
               await _resetEverything(context, ref);
@@ -600,52 +598,7 @@ class SettingsView extends ConsumerWidget {
 
   /// Clears the menu library and order history, then tells the kitchen displays
   /// to drop what they are showing.
-  ///
-  /// The displays hold their tickets in memory and are not re-synced until they
-  /// re-register, so without the broadcast every tablet keeps serving a board
-  /// the host no longer has any record of.
   Future<void> _resetEverything(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
-            SizedBox(width: 10),
-            Text(
-              'Delete for good?',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Menu items, stations and order history will be deleted, and every '
-          'connected display will clear its board. This cannot be undone.',
-          style: TextStyle(color: Color(0xFF6B7280)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'CANCEL',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'DELETE',
-              style: TextStyle(
-                color: Color(0xFFDC2626),
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(hostStoreProvider).clearLibrary();
@@ -662,8 +615,6 @@ class SettingsView extends ConsumerWidget {
       );
     } catch (e) {
       if (!context.mounted) return;
-      // Reported rather than swallowed: a reset that silently failed leaves the
-      // host holding data the operator believes they destroyed.
       messenger.showSnackBar(
         SnackBar(
           content: Text(

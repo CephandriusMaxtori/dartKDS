@@ -931,19 +931,23 @@ class _ClientHomeState extends ConsumerState<ClientHome>
       builder: (context) => Consumer(
         builder: (context, ref, _) {
           final recent = ref.watch(recentBumpsProvider);
+          final settings = ref.watch(settingsProvider);
+          final isLight =
+              settings.themeMode == ThemeMode.light &&
+              !settings.clientHighContrast;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1F2937),
-            title: const Text(
+            backgroundColor: isLight ? Colors.white : const Color(0xFF1F2937),
+            title: Text(
               'RECENT BUMPS',
               style: TextStyle(
-                color: Colors.white,
+                color: isLight ? Colors.black : Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
             content: recent.isEmpty
-                ? const Text(
+                ? Text(
                     'No recent bumps',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: isLight ? Colors.black54 : Colors.grey),
                   )
                 : SizedBox(
                     width: 400,
@@ -955,14 +959,14 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                         return ListTile(
                           title: Text(
                             '#${order.uuid.substring(0, 4).toUpperCase()} - ${order.customerName.toUpperCase()}',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: isLight ? Colors.black : Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           subtitle: Text(
                             DateFormat('HH:mm:ss').format(order.timestamp),
-                            style: const TextStyle(color: Colors.grey),
+                            style: TextStyle(color: isLight ? Colors.black54 : Colors.grey),
                           ),
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(
@@ -1211,6 +1215,19 @@ class _ClientHomeState extends ConsumerState<ClientHome>
                     activeThumbColor: const Color(0xFF22C55E),
                     onChanged: (val) => notifier.setEnableConfetti(val),
                   ),
+                  SwitchListTile(
+                    title: Text(
+                      'KEEP SCREEN ON',
+                      style: TextStyle(
+                        color: isLight ? Colors.black : Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    value: settings.keepScreenOn,
+                    activeThumbColor: const Color(0xFF22C55E),
+                    onChanged: (val) => notifier.setKeepScreenOn(val),
+                  ),
                   ListTile(
                     title: const Text(
                       'CURRENT STATION',
@@ -1335,21 +1352,28 @@ class _ClientHomeState extends ConsumerState<ClientHome>
     final controller = TextEditingController(
       text: ref.read(stationTagProvider),
     );
+    final settings = ref.read(settingsProvider);
+    final isLight =
+        settings.themeMode == ThemeMode.light &&
+        !settings.clientHighContrast;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2937),
-        title: const Text(
+        backgroundColor: isLight ? Colors.white : const Color(0xFF1F2937),
+        title: Text(
           'SET STATION NAME',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(
+            color: isLight ? Colors.black : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: isLight ? Colors.black : Colors.white),
+          decoration: InputDecoration(
             hintText: 'e.g. GRILL, FRYER, EXPO',
-            hintStyle: TextStyle(color: Colors.grey),
+            hintStyle: TextStyle(color: isLight ? Colors.black45 : Colors.grey),
           ),
         ),
         actions: [
@@ -1375,33 +1399,40 @@ class _ClientHomeState extends ConsumerState<ClientHome>
   void _showManualConnectDialog() {
     final controller = TextEditingController();
     final portController = TextEditingController(text: '8080');
+    final settings = ref.read(settingsProvider);
+    final isLight =
+        settings.themeMode == ThemeMode.light &&
+        !settings.clientHighContrast;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2937),
-        title: const Text(
+        backgroundColor: isLight ? Colors.white : const Color(0xFF1F2937),
+        title: Text(
           'MANUAL CONNECT',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(
+            color: isLight ? Colors.black : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
+              style: TextStyle(color: isLight ? Colors.black : Colors.white),
+              decoration: InputDecoration(
                 hintText: 'HOST IP ADDRESS',
-                hintStyle: TextStyle(color: Colors.grey),
+                hintStyle: TextStyle(color: isLight ? Colors.black45 : Colors.grey),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: portController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: isLight ? Colors.black : Colors.white),
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'PORT (8080)',
-                hintStyle: TextStyle(color: Colors.grey),
+                hintStyle: TextStyle(color: isLight ? Colors.black45 : Colors.grey),
               ),
             ),
           ],
