@@ -235,21 +235,48 @@ class DriftHostStore implements HostStore {
   Future<void> importLibrary(Map<String, dynamic> data) async {
     await db.transaction(() async {
       final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final existingStations = await db.select(db.stations).get();
       for (final s in (data['stations'] as List? ?? [])) {
-        await db.into(db.stations).insertOnConflictUpdate(
-          StationsCompanion.insert(
-            name: s['name'].toString(),
-            updatedAtMs: drift.Value(nowMs),
-          ),
-        );
+        final name = (s['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final existing = existingStations.where((e) => e.name == name).firstOrNull;
+        if (existing != null) {
+          await (db.update(db.stations)..where((t) => t.id.equals(existing.id))).write(
+            StationsCompanion(
+              name: drift.Value(name),
+              updatedAtMs: drift.Value(nowMs),
+            ),
+          );
+        } else {
+          await db.into(db.stations).insert(
+            StationsCompanion.insert(
+              name: name,
+              updatedAtMs: drift.Value(nowMs),
+            ),
+          );
+        }
       }
+
+      final existingModifiers = await db.select(db.globalModifiers).get();
       for (final m in (data['globalModifiers'] as List? ?? [])) {
-        await db.into(db.globalModifiers).insertOnConflictUpdate(
-          GlobalModifiersCompanion.insert(
-            name: m['name'].toString(),
-            updatedAtMs: drift.Value(nowMs),
-          ),
-        );
+        final name = (m['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final existing = existingModifiers.where((e) => e.name == name).firstOrNull;
+        if (existing != null) {
+          await (db.update(db.globalModifiers)..where((t) => t.id.equals(existing.id))).write(
+            GlobalModifiersCompanion(
+              name: drift.Value(name),
+              updatedAtMs: drift.Value(nowMs),
+            ),
+          );
+        } else {
+          await db.into(db.globalModifiers).insert(
+            GlobalModifiersCompanion.insert(
+              name: name,
+              updatedAtMs: drift.Value(nowMs),
+            ),
+          );
+        }
       }
       final existingItems = await db.select(db.menuItems).get();
       for (final i in (data['menuItems'] as List? ?? [])) {
