@@ -805,11 +805,11 @@ class HostServer {
                         KDSItemsCompanion.insert(
                           uuid: itemUuid,
                           orderUuid: orderUuid,
-                          name: item['name'],
-                          modifiers: List<String>.from(item['modifiers']),
-                          stationTag: item['stationTag'] ?? 'GENERAL',
+                          name: item['name']?.toString() ?? 'Item',
+                          modifiers: List<String>.from(item['modifiers'] as List? ?? []),
+                          stationTag: item['stationTag']?.toString() ?? 'GENERAL',
                           status: ItemStatus.pending,
-                          price: drift.Value(item['price']?.toDouble() ?? 0.0),
+                          price: drift.Value((item['price'] as num?)?.toDouble() ?? double.tryParse(item['price']?.toString() ?? '') ?? 0.0),
                           updatedAtMs: drift.Value(
                             DateTime.now().millisecondsSinceEpoch,
                           ),

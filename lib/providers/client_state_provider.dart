@@ -77,13 +77,13 @@ class ClientStateNotifier extends StateNotifier<List<ClientOrder>> {
           customerName: orderData['customerName'],
           timestamp: DateTime.parse(orderData['timestamp']),
           status: OrderStatus.values[orderData['status']],
-          items: (orderData['items'] as List)
+          items: (orderData['items'] as List? ?? [])
               .map(
                 (i) => ClientItem(
-                  uuid: i['uuid'],
-                  name: i['name'],
-                  modifiers: List<String>.from(i['modifiers']),
-                  stationTag: i['stationTag'],
+                  uuid: i['uuid']?.toString() ?? '',
+                  name: i['name']?.toString() ?? '',
+                  modifiers: List<String>.from(i['modifiers'] as List? ?? []),
+                  stationTag: i['stationTag']?.toString() ?? 'GENERAL',
                   isBumped:
                       (i['status'] as int?) == ItemStatus.bumped.index,
                 ),
