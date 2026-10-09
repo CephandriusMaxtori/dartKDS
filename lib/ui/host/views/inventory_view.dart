@@ -6,11 +6,18 @@ import '../../../models/database.dart';
 import '../../../data/host_store.dart';
 import '../../../providers/host_store_provider.dart';
 
-class InventoryView extends ConsumerWidget {
+class InventoryView extends ConsumerStatefulWidget {
   const InventoryView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InventoryView> createState() => _InventoryViewState();
+}
+
+class _InventoryViewState extends ConsumerState<InventoryView> {
+  String _sortBy = 'stock_asc';
+
+  @override
+  Widget build(BuildContext context) {
     final store = ref.watch(hostStoreProvider);
     final theme = Theme.of(context);
     final isCompact = MediaQuery.of(context).size.width < 600;
@@ -36,6 +43,26 @@ class InventoryView extends ConsumerWidget {
                     ],
                   ),
                 ),
+                DropdownButton<String>(
+                  value: _sortBy,
+                  underline: const SizedBox(),
+                  isDense: true,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'stock_asc', child: Text('Sort: Low Stock First')),
+                    DropdownMenuItem(value: 'stock_desc', child: Text('Sort: High Stock First')),
+                    DropdownMenuItem(value: 'name', child: Text('Sort: Name (A-Z)')),
+                    DropdownMenuItem(value: 'station', child: Text('Sort: Station')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _sortBy = val);
+                  },
+                ),
+                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: () => _exportShoppingList(context, store),
                   icon: const Icon(Icons.list_alt_rounded, size: 18),
@@ -60,12 +87,28 @@ class InventoryView extends ConsumerWidget {
                   return Center(child: Text('No tracked items found', style: TextStyle(color: theme.hintColor, fontWeight: FontWeight.w600)));
                 }
 
+                final sortedItems = [...items];
+                switch (_sortBy) {
+                  case 'name':
+                    sortedItems.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    break;
+                  case 'stock_asc':
+                    sortedItems.sort((a, b) => a.stockQuantity.compareTo(b.stockQuantity));
+                    break;
+                  case 'stock_desc':
+                    sortedItems.sort((a, b) => b.stockQuantity.compareTo(a.stockQuantity));
+                    break;
+                  case 'station':
+                    sortedItems.sort((a, b) => a.defaultStation.toLowerCase().compareTo(b.defaultStation.toLowerCase()));
+                    break;
+                }
+
                 return ListView.separated(
                   padding: EdgeInsets.all(isCompact ? 12 : 20),
-                  itemCount: items.length,
+                  itemCount: sortedItems.length,
                   separatorBuilder: (context, index) => SizedBox(height: isCompact ? 12 : 16),
                   itemBuilder: (context, index) {
-                    final item = items[index];
+                    final item = sortedItems[index];
                     final isLow = item.stockQuantity > 0 && item.stockQuantity <= 5;
                     final isOut = item.stockQuantity <= 0;
 
@@ -216,11 +259,11 @@ class InventoryView extends ConsumerWidget {
     );
   }
 
-    void _updateStock(HostStore store, MenuItemData item, int newQuantity) {
+  void _updateStock(HostStore store, MenuItemData item, int newQuantity) {
     store.setStock(item.id, newQuantity);
   }
 
-    void _exportShoppingList(BuildContext context, HostStore store) async {
+  void _exportShoppingList(BuildContext context, HostStore store) async {
     final lowStockItems = await store.getLowStockItems();
     if (lowStockItems.isEmpty) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All items are in stock.'))); return; }
     final StringBuffer buffer = StringBuffer();

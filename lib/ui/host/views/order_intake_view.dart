@@ -33,6 +33,7 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
   String _searchQuery = '';
   String _selectedCategory = 'ALL';
   String _selectedTag = 'ALL';
+  String _sortBy = 'name';
   bool _filtersExpanded = false;
   Timer? _searchDebounce;
 
@@ -263,6 +264,27 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                         ),
                       ],
                       const Spacer(),
+                      DropdownButton<String>(
+                        value: _sortBy,
+                        underline: const SizedBox(),
+                        isDense: true,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'name', child: Text('Sort: Name')),
+                          DropdownMenuItem(value: 'price_asc', child: Text(r'Sort: Price ($–$$)')),
+                          DropdownMenuItem(value: 'price_desc', child: Text(r'Sort: Price ($$$–$)')),
+                          DropdownMenuItem(value: 'category', child: Text('Sort: Category')),
+                          DropdownMenuItem(value: 'station', child: Text('Sort: Station')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _sortBy = val);
+                        },
+                      ),
+                      const SizedBox(width: 8),
                       Icon(
                         _filtersExpanded
                             ? Icons.keyboard_arrow_up
@@ -336,7 +358,26 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                     .toList();
               }
 
-              if (items.isEmpty) {
+              final sortedItems = [...items];
+              switch (_sortBy) {
+                case 'name':
+                  sortedItems.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                  break;
+                case 'price_asc':
+                  sortedItems.sort((a, b) => a.price.compareTo(b.price));
+                  break;
+                case 'price_desc':
+                  sortedItems.sort((a, b) => b.price.compareTo(a.price));
+                  break;
+                case 'category':
+                  sortedItems.sort((a, b) => a.category.toLowerCase().compareTo(b.category.toLowerCase()));
+                  break;
+                case 'station':
+                  sortedItems.sort((a, b) => a.defaultStation.toLowerCase().compareTo(b.defaultStation.toLowerCase()));
+                  break;
+              }
+
+              if (sortedItems.isEmpty) {
                 return Center(
                   child: Text(
                     'No items found',
@@ -359,9 +400,9 @@ class OrderIntakeViewState extends ConsumerState<OrderIntakeView> {
                       mainAxisSpacing: 8,
                       childAspectRatio: 1.0,
                     ),
-                    itemCount: items.length,
+                    itemCount: sortedItems.length,
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      final item = sortedItems[index];
                       final isOut = item.trackStock && item.stockQuantity <= 0;
 
                       return AnimatedContainer(
